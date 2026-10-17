@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Receipts in `org.donnc.fzimra.core`:
+  - `ReceiptRequest`, `ReceiptLine`, `Payment`, `Buyer` and `OriginalReceipt`
+    describe a sale, a credit note or a debit note with positive numbers in
+    the app's own number types;
+  - `ReceiptLineMapper` and `toReceiptLines` turn the app's own item model
+    into receipt lines without changing it;
+  - `ReceiptBuilder.prepare` works out line totals, exact unit prices, the tax
+    table (per tax, half to even), the receipt total, payment amounts and cash
+    change, applies credit note and discount signs, and returns a
+    `PreparedReceipt` or every problem found (`ReceiptProblem`, with the ZIMRA
+    validation code where one applies);
+  - checks for currency, lines, quantities, prices, taxes in force, VAT for
+    non-VAT payers, HS codes, totals, payments, buyer data and credit and
+    debit note references;
+  - `FiscalCounters`: the counters a receipt adds to its fiscal day, merging
+    and totals.
+- Tests for every rule, the computations and the conformance vectors' tax
+  tables, including tax-exclusive receipts.
 - Fiscal primitives in `org.donnc.fzimra.core`:
   - `FiscalMoney`: `BigDecimal` arithmetic with half-even rounding, exact
     conversion to whole cents (fractions of a cent are refused), and

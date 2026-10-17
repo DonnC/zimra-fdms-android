@@ -41,11 +41,92 @@ library from source and depend on the resulting AAR.
 
 ## Usage
 
+### Preparing a receipt
+
+Describe the sale with what your app already knows. fzimra works out line
+totals, the tax table, the receipt total and payment amounts, applies the
+signs ZIMRA requires, and checks every rule that can be checked on the device.
+
+```kotlin
+val context = ReceiptContext(
+    taxes = listOf(
+        TaxDefinition(1, "Standard rated 15%", BigDecimal("15")),
+        TaxDefinition(2, "Zero rated 0%", BigDecimal.ZERO),
+        TaxDefinition(3, "Exempt", null),
+    ),
+    isVatPayer = true,
+)
+
+val result = ReceiptBuilder.prepare(
+    ReceiptRequest(
+        type = ReceiptType.FISCAL_INVOICE,
+        currency = "USD",
+        invoiceNo = "INV-1029",
+        lines = listOf(
+            ReceiptLine.sale("Bread", quantity = 2, unitPrice = 1.15, taxId = 1, hsCode = "19059000"),
+            ReceiptLine.discount("Loyalty discount", amount = 0.30, taxId = 1, hsCode = "19059000"),
+        ),
+        payments = listOf(Payment.cash(5)), // cash handed over; change is worked out
+    ),
+    context,
+)
+
+when (result) {
+    is ReceiptResult.Prepared -> {
+        val receipt = result.receipt // total 2.00, tax 0.26, change 3.00
+    }
+    is ReceiptResult.Refused -> result.problems.forEach { println("${it.field}: ${it.message} (${it.zimraCode})") }
+}
+```
+
+- **Positive numbers only.** Credit note lines and refunds, and discount lines,
+  become negative automatically.
+- **Your number types.** `Int`, `Long`, `BigDecimal`, `Double` and `Float` are
+  accepted. Floating point values are read through their shortest decimal form
+  (`19.99` stays `19.99`); a value that is not exact, such as `0.1 + 0.2`, is
+  refused instead of being rounded silently.
+- **Unit price or line total.** Give a line by unit price (`ReceiptLine.sale`)
+  or by a total your app already worked out (`ReceiptLine.saleWithTotal`).
+- **Prices with or without tax.** Set `pricesIncludeTax = false` when your
+  prices exclude tax; tax is then added on top.
+- **Tax percentages are looked up** from the context by tax ID.
+- **Payments.** `Payment.cash()` with no amount pays whatever is left of the
+  total. Cash handed over beyond the total is returned as `change`.
+- **Credit and debit notes** need a reason (`notes`) and the original receipt
+  (`original`).
+- **Every problem at once.** A refused receipt lists all its problems, each
+  with the field concerned, a plain message and, when it applies, the ZIMRA
+  validation code the receipt would have received.
+
+A prepared receipt is a model only. How it is shown or printed (screen,
+thermal printer, PDF) is up to your app.
+
+### Your own item model
+
+Your item or product class does not need to change. Write one
+`ReceiptLineMapper` for it and reuse it for every sale:
+
+```kotlin
+val toLine = ReceiptLineMapper<CartItem> { item ->
+    ReceiptLine.sale(item.title, item.qty, FiscalMoney.fromCents(item.priceCents),
+                     taxId = taxIdFor(item.taxClass), hsCode = item.hsCode)
+}
+
+val lines = cart.items.toReceiptLines(toLine)
+```
+
+### Fiscal counters
+
+`FiscalCounters.of(receipt)` gives the counters a prepared receipt adds to its
+fiscal day, and `FiscalCounters.merge(...)` adds up counters across receipts.
+
+### Signing primitives
+
 All amounts are `java.math.BigDecimal`. Amounts that are signed must be whole
 cents: a fraction of a cent raises `FiscalValueException` instead of being
 rounded silently.
 
-### Receipt signature input
+#### Receipt signature input
 
 `SignatureStrings.receipt` builds the exact string a fiscal device hashes and
 signs for a receipt. `Sha256.base64` gives its hash.
@@ -67,7 +148,7 @@ val hash = Sha256.base64(canonical)
 
 An exempt tax has `taxPercent = null`; a zero-rated tax has `BigDecimal.ZERO`.
 
-### Fiscal day signature input
+#### Fiscal day signature input
 
 `SignatureStrings.fiscalDay` builds the string signed when a fiscal day is
 closed. Counters are sorted in the order ZIMRA requires and
@@ -87,7 +168,7 @@ val canonical = SignatureStrings.fiscalDay(
 )
 ```
 
-### QR code and verification code
+#### QR code and verification code
 
 ```kotlin
 val qrData = ReceiptQr.qrData(deviceSignatureBase64)
@@ -97,7 +178,7 @@ val verificationCode = ReceiptQr.verificationCode(qrData)           // e.g. 4C8B
 
 `qrUrl` is the verification URL in the device's ZIMRA configuration.
 
-### Money
+#### Money
 
 `FiscalMoney` rounds half to even (`roundToCents`), converts to and from whole
 cents (`toCents`, `fromCents`), and splits an amount across weights so that the

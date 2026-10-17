@@ -144,4 +144,52 @@ class VectorConformanceTest {
         }
         assertEquals(4, checked)
     }
+
+    private fun lineFrom(json: JsonObject, index: Int) = PreparedLine(
+        lineNo = index + 1,
+        type = ReceiptLineType.entries.single { it.specName == json.text("receiptLineType") },
+        name = json.text("receiptLineName"),
+        quantity = json.decimal("receiptLineQuantity"),
+        unitPrice = null,
+        total = json.decimal("receiptLineTotal"),
+        taxId = json.int("taxID"),
+        taxPercent = json.optDecimal("taxPercent"),
+        hsCode = null,
+    )
+
+    private fun JsonObject.taxRows(key: String): List<ReceiptTax> {
+        val rows = mutableListOf<ReceiptTax>()
+        array(key).objects { rows += ReceiptTax(it.int("taxID"), it.optDecimal("taxPercent"), it.decimal("taxAmount"), it.decimal("salesAmountWithTax")) }
+        return rows
+    }
+
+    /** Amounts compared by value: the vectors write 3 where fzimra keeps 3.00. */
+    private fun normalised(taxes: List<ReceiptTax>) = taxes.map {
+        listOf(it.taxId, it.taxPercent?.stripTrailingZeros(), it.taxAmount.stripTrailingZeros(), it.salesAmountWithTax.stripTrailingZeros())
+    }
+
+    @Test
+    fun taxTables() {
+        var checked = 0
+        vectors.array("taxes").objects { vector ->
+            val lines = vector.array("lines").mapIndexed { i, line -> lineFrom(line.jsonObject, i) }
+            val computed = ReceiptBuilder.taxTable(lines, pricesIncludeTax = vector.text("taxInclusive").toBoolean())
+            assertEquals(vector.text("name"), normalised(vector.taxRows("expected")), normalised(computed))
+            checked++
+        }
+        assertEquals(4, checked)
+    }
+
+    @Test
+    fun receiptTaxTablesFromTheirLines() {
+        var checked = 0
+        vectors.array("receipts").objects { vector ->
+            val receipt = vector.getValue("receipt").jsonObject
+            val lines = receipt.array("receiptLines").mapIndexed { i, line -> lineFrom(line.jsonObject, i) }
+            val computed = ReceiptBuilder.taxTable(lines, receipt.text("receiptLinesTaxInclusive").toBoolean())
+            assertEquals(vector.text("name"), normalised(receipt.taxRows("receiptTaxes")), normalised(computed))
+            checked++
+        }
+        assertEquals(5, checked)
+    }
 }
