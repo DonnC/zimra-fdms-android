@@ -2,7 +2,7 @@ package org.donnc.fzimra.core
 
 import java.math.BigDecimal
 
-/** Receipt types (spec §5.4.6). [specName] is the name used by FDMS. */
+/** Receipt types. [specName] is the name used by FDMS. */
 public enum class ReceiptType(public val specName: String) {
     FISCAL_INVOICE("FiscalInvoice"),
     CREDIT_NOTE("CreditNote"),
@@ -10,9 +10,8 @@ public enum class ReceiptType(public val specName: String) {
 }
 
 /**
- * Money types (spec §5.4.5), in the order of the specification's enumeration.
- * That order, not alphabetical order, sorts balance counters when a fiscal day
- * is signed (§13.3.1).
+ * Money types, in ZIMRA's order. That order, not alphabetical order, sorts
+ * balance counters when a fiscal day is signed.
  */
 public enum class MoneyType(public val specName: String) {
     CASH("Cash"),
@@ -25,8 +24,8 @@ public enum class MoneyType(public val specName: String) {
 }
 
 /**
- * Fiscal counter types (spec §5.4.4), in the order of the specification's
- * enumeration, which sorts counters when a fiscal day is signed (§13.3.1).
+ * Fiscal counter types, in ZIMRA's order, which sorts counters when a fiscal
+ * day is signed.
  */
 public enum class FiscalCounterType(public val specName: String, public val isByTax: Boolean) {
     SALE_BY_TAX("SaleByTax", true),
@@ -39,8 +38,7 @@ public enum class FiscalCounterType(public val specName: String, public val isBy
 }
 
 /**
- * One row of a receipt's tax table, as it enters the receipt signature
- * (spec §13.2.1, field 7).
+ * One row of a receipt's tax table, as it enters the receipt signature.
  *
  * The optional `taxCode` is deliberately not modelled. The specification
  * includes it in the signed string while receipts verified on ZIMRA's live
@@ -64,7 +62,7 @@ public data class ReceiptTax(
 }
 
 /**
- * One fiscal-day counter (spec §5.3, §6).
+ * One fiscal-day counter.
  *
  * By-tax counters carry a [taxId] (and a [taxPercent], or `null` when exempt).
  * Balance counters carry a [moneyType]. A counter with a value of zero is

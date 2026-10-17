@@ -12,7 +12,7 @@ public class FiscalValueException(message: String) : IllegalArgumentException(me
 /**
  * Exact money arithmetic for fiscal receipts.
  *
- * ZIMRA signs amounts in cents (spec §13.2.1) and validates totals to the cent
+ * ZIMRA signs amounts in cents and validates totals to the cent
  * (RCPT019, RCPT026, RCPT038, RCPT039). Amounts are therefore [BigDecimal],
  * never floating point, and every rounding uses [ROUNDING].
  */

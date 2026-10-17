@@ -48,7 +48,7 @@ rounded silently.
 ### Receipt signature input
 
 `SignatureStrings.receipt` builds the exact string a fiscal device hashes and
-signs for a receipt (spec §13.2.1). `Sha256.base64` gives its hash.
+signs for a receipt. `Sha256.base64` gives its hash.
 
 ```kotlin
 val canonical = SignatureStrings.receipt(
@@ -70,7 +70,7 @@ An exempt tax has `taxPercent = null`; a zero-rated tax has `BigDecimal.ZERO`.
 ### Fiscal day signature input
 
 `SignatureStrings.fiscalDay` builds the string signed when a fiscal day is
-closed (spec §13.3.1). Counters are sorted as the specification requires and
+closed. Counters are sorted in the order ZIMRA requires and
 zero counters are left out.
 
 ```kotlin
@@ -90,7 +90,7 @@ val canonical = SignatureStrings.fiscalDay(
 ### QR code and verification code
 
 ```kotlin
-val qrData = ReceiptQr.qrData(deviceSignatureBase64)                // spec §11
+val qrData = ReceiptQr.qrData(deviceSignatureBase64)
 val qrContent = ReceiptQr.url(qrUrl, deviceId, receiptDate.toLocalDate(), receiptGlobalNo, qrData)
 val verificationCode = ReceiptQr.verificationCode(qrData)           // e.g. 4C8B-E276-6333-0417
 ```
@@ -147,7 +147,7 @@ outside Android. A unit test (`CorePurityTest`) fails the build if it does.
 `./gradlew test` runs the unit tests on the JVM. Signing strings, hashes and QR
 codes are checked against:
 
-- the worked examples in the ZIMRA specification (§11, §13);
+- the worked examples in ZIMRA's specification;
 - conformance vectors verified on ZIMRA's test environment
   (`src/test/resources/vectors`, see its `NOTICE.md`).
 

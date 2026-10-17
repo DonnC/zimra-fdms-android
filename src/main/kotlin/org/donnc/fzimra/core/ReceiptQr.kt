@@ -6,7 +6,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.Locale
 
-/** SHA-256 as used by ZIMRA: Base64 of the digest of the UTF-8 text (spec §13.1). */
+/** SHA-256 as used by ZIMRA: Base64 of the digest of the UTF-8 text. */
 public object Sha256 {
     /** The Base64-encoded SHA-256 digest of [text] encoded as UTF-8. */
     public fun base64(text: String): String =
@@ -14,7 +14,7 @@ public object Sha256 {
 }
 
 /**
- * The receipt QR code and verification code (spec §11, §10.3 fields 45–48).
+ * The receipt QR code and verification code.
  *
  * The QR code encodes `qrUrl/` ‖ deviceID (10 digits) ‖ receiptDate
  * (`ddMMyyyy`) ‖ receiptGlobalNo (10 digits) ‖ receiptQrData. The same
@@ -28,7 +28,7 @@ public object ReceiptQr {
 
     /**
      * receiptQrData: the first 16 hexadecimal characters of the MD5 digest of
-     * the raw receipt device signature, in upper case as in the §11 examples.
+     * the raw receipt device signature, in upper case.
      *
      * @param deviceSignatureBase64 the receipt's device signature, Base64-encoded.
      * @throws FiscalValueException if the signature is not valid Base64.

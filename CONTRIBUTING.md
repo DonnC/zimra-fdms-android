@@ -37,9 +37,10 @@ real receipts in an issue or pull request. Redact them.
   prove it, and every bug fix with a test that fails without the fix.
 - **Keep `core` free of Android.** Code in `org.donnc.fzimra.core` must not
   import Android APIs. `CorePurityTest` enforces this.
-- **Cite the specification.** Any change to what is signed, numbered or sent to
-  ZIMRA refers to the section of the Fiscal Device Gateway API it implements,
-  in the code and in the pull request.
+- **Follow ZIMRA's specification exactly.** Any change to what is signed,
+  numbered or sent to ZIMRA must match the Fiscal Device Gateway API and come
+  with tests that prove it, against the specification's own examples where
+  they exist.
 - **Public API is explicit.** The library builds in Kotlin's explicit API
   mode: every public declaration states its visibility and type, and is
   documented with KDoc.

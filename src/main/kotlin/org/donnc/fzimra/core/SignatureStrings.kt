@@ -8,9 +8,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * The strings that a fiscal device and FDMS hash and sign (spec §13).
+ * The strings that a fiscal device and FDMS hash and sign.
  *
- * Fields are converted to text and concatenated with no separator (§13.1).
+ * Fields are converted to text and concatenated with no separator.
  * A single wrong character makes FDMS flag the receipt with RCPT020 or refuse
  * the day close with `BadCertificateSignature`, so every function here is
  * tested against the specification's worked examples.
@@ -22,14 +22,14 @@ public object SignatureStrings {
     private val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT)
     private val CURRENCY = Regex("^[A-Za-z]{3}$")
 
-    /** `YYYY-MM-DDTHH:mm:ss`: local wall-clock time, 24-hour, no time zone (§13.2.1 field 5). */
+    /** `YYYY-MM-DDTHH:mm:ss`: local wall-clock time, 24-hour, no time zone. */
     public fun formatDateTime(value: LocalDateTime): String = DATE_TIME.format(value)
 
-    /** `YYYY-MM-DD` (§13.3.1 field 3). */
+    /** `YYYY-MM-DD`. */
     public fun formatDate(value: LocalDate): String = DATE.format(value)
 
     /**
-     * A tax percent as it is signed (§13.2.1 field 7): `15` → `"15.00"`,
+     * A tax percent as it is signed: `15` → `"15.00"`,
      * `14.5` → `"14.50"`, `0` → `"0.00"`, exempt (`null`) → `""`.
      *
      * @throws FiscalValueException if [percent] has more than two decimal places.
@@ -44,7 +44,7 @@ public object SignatureStrings {
     }
 
     /**
-     * The tax block of a receipt signature (§13.2.1 field 7):
+     * The tax block of a receipt signature:
      * taxPercent ‖ taxAmount in cents ‖ salesAmountWithTax in cents, for each
      * tax ordered by taxID.
      */
@@ -56,7 +56,7 @@ public object SignatureStrings {
         }
 
     /**
-     * The input of a receipt's device signature (§13.2.1):
+     * The input of a receipt's device signature:
      * deviceID ‖ receiptType ‖ receiptCurrency ‖ receiptGlobalNo ‖ receiptDate ‖
      * receiptTotal in cents ‖ receiptTaxes ‖ previousReceiptHash.
      *
@@ -90,15 +90,15 @@ public object SignatureStrings {
     }
 
     /**
-     * The input of FDMS's signature on a receipt (§13.2.2):
+     * The input of FDMS's signature on a receipt:
      * receiptDeviceSignature ‖ receiptID ‖ serverDate.
      */
     public fun receiptServer(deviceSignatureBase64: String, receiptId: Long, serverDate: LocalDateTime): String =
         deviceSignatureBase64 + receiptId + formatDateTime(serverDate)
 
     /**
-     * Non-zero [counters] in signing order (§13.3.1): by counter type, then
-     * currency, then taxID, then money type in the specification's order.
+     * Non-zero [counters] in signing order: by counter type, then
+     * currency, then taxID, then money type in ZIMRA's order.
      */
     public fun sortedCounters(counters: List<FiscalCounter>): List<FiscalCounter> =
         counters.filter { it.value.signum() != 0 }.sortedWith(
@@ -109,7 +109,7 @@ public object SignatureStrings {
         )
 
     /**
-     * The counter block of a fiscal-day signature (§13.3.1): for each non-zero
+     * The counter block of a fiscal-day signature: for each non-zero
      * counter, counterType ‖ currency ‖ taxPercent or moneyType ‖ value in cents.
      */
     public fun counters(counters: List<FiscalCounter>): String =
@@ -123,7 +123,7 @@ public object SignatureStrings {
         }
 
     /**
-     * The input of a fiscal day's device signature (§13.3.1):
+     * The input of a fiscal day's device signature:
      * deviceID ‖ fiscalDayNo ‖ fiscalDayDate ‖ fiscalDayCounters.
      *
      * [fiscalDayDate] is the date the day was opened, not the date it closes.
@@ -140,7 +140,7 @@ public object SignatureStrings {
     }
 
     /**
-     * The input of FDMS's signature on a closed fiscal day (§13.3.2):
+     * The input of FDMS's signature on a closed fiscal day:
      * deviceID ‖ fiscalDayNo ‖ fiscalDayDate ‖ fiscalDayUpdated ‖
      * reconciliationMode ‖ fiscalDayCounters ‖ fiscalDayDeviceSignature.
      *
