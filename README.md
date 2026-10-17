@@ -164,6 +164,27 @@ signature.signature  // Base64 signature
 
 `Signer` is an interface: implement it only to use another secure key store.
 
+### Storage
+
+fzimra keeps two kinds of data, through two interfaces your app may
+implement:
+
+- `FiscalStateStore` holds what a fiscal device must never lose: its
+  numbering, its current fiscal day and the receipts ZIMRA has not yet
+  accepted. It is written as one snapshot, atomically, and never pruned.
+- `ReceiptRecordStore` holds the history of issued receipts and their
+  standing with ZIMRA, for display and lookup.
+
+If your app provides neither, fzimra keeps both itself, in the app's private
+no-backup storage: device state in one small file per device, and records as
+one small file per receipt. Records of receipts ZIMRA has accepted are removed
+after 7 days; records of receipts that are pending or rejected are kept.
+Through fzimra, records are read-only (`ReceiptRecords`).
+
+Fiscal data is never backed up. Restoring an older copy of the device state
+would make the device reuse receipt numbers ZIMRA has already received. If
+you implement `FiscalStateStore` yourself, keep its data out of backups too.
+
 ### Signing primitives
 
 All amounts are `java.math.BigDecimal`. Amounts that are signed must be whole

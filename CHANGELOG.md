@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Storage:
+  - `FiscalStateStore`: a device's numbering state and the receipts ZIMRA
+    has not yet accepted, saved as one atomic `FiscalSnapshot`; never pruned;
+  - `ReceiptRecordStore` and its read-only view `ReceiptRecords`: the history
+    of issued receipts (`ReceiptRecord`) and their standing with ZIMRA;
+  - models for the device state, fiscal days, issued receipts and ZIMRA's
+    findings;
+  - default stores used when the app provides none: private no-backup files,
+    written atomically; records of accepted receipts removed after 7 days,
+    pending and rejected ones kept.
+- Tests: contract tests every store implementation must pass, retention
+  rules, and exact round trips of stored data.
 - Keys and signing:
   - `Signer` interface and `SignatureAlgorithm` (ECDSA P-256 or RSA, SHA-256);
   - `FiscalSignature.sign` and `verify`: every signature is verified against
