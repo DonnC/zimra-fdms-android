@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The example app (`:example`): a Jetpack Compose point-of-sale app showing
+  device registration, sales and refunds, receipts with QR and verification
+  codes, fiscal days and their close, background sync, ZIMRA's traffic, and
+  the simulator's faults. It starts on the built-in simulator and switches
+  to ZIMRA's test or production environment. Its whole integration is one
+  class, `FiscalEngine`; its README is an integration guide.
 - The simulator (`:simulator`, `org.donnc.fzimra.simulator`), an optional
   library: a ZIMRA Fiscal Device Gateway inside the app or tests
   (`FdmsSimulator`). It issues device certificates from certificate requests

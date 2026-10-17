@@ -18,3 +18,4 @@ dependencyResolutionManagement {
 // companion library for development and tests; the example app consumes both.
 rootProject.name = "zimra-fdms-android"
 include(":simulator")
+include(":example")

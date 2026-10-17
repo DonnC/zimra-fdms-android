@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- BouncyCastle, brought in by the simulator, contains a trust-all manager
+         for its own tools; nothing here uses it. Our code is still checked. -->
+    <issue id="TrustAllX509TrustManager">
+        <ignore regexp="bcpkix-jdk18on" />
+    </issue>
+    <!-- The base icon serves API 26 to 32, which have no themed icons; the
+         API 33 variant (mipmap-anydpi-v33) has the monochrome layer. -->
+    <issue id="MonochromeLauncherIcon">
+        <ignore path="src/main/res/mipmap-anydpi/ic_launcher.xml" />
+    </issue>
+</lint>

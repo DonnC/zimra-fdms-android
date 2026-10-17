@@ -644,7 +644,11 @@ src/main/kotlin/org/donnc/fzimra/
 src/test/kotlin/org/donnc/fzimra/
                Unit tests, run on the JVM.
 simulator/     Optional library: a ZIMRA gateway for development and tests.
+example/       A point-of-sale app in Jetpack Compose using both.
 ```
+
+The [example app](example/README.md) shows fzimra end to end and is the best
+place to start an integration.
 
 `core` must never import Android APIs, so it can be tested on the JVM and used
 outside Android. A unit test (`CorePurityTest`) fails the build if it does.
