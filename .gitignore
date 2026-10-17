@@ -1,0 +1,18 @@
+# Gradle
+.gradle/
+build/
+.kotlin/
+
+# Local configuration (SDK path, signing)
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# ZIMRA's specification is ZIMRA copyright; keep it out of the repository
+*.pdf
