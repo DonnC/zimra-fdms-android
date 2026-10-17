@@ -71,6 +71,7 @@ internal object StoreCodec {
         "receiptCounter" to num(d.receiptCounter),
         "lastReceiptHash" to opt(d.lastReceiptHash),
         "counters" to JsonValue.Arr(d.counters.map(::counter)),
+        "closeReason" to opt(d.closeReason?.name),
     )
 
     private fun counter(c: FiscalCounter) = obj(
@@ -195,6 +196,7 @@ internal object StoreCodec {
         receiptCounter = o.int("receiptCounter"),
         lastReceiptHash = o.optText("lastReceiptHash"),
         counters = o.list("counters").map { counter(it.asObj()) },
+        closeReason = o.optText("closeReason")?.let { enumValueOf<DayCloseReason>(it) },
     )
 
     private fun counter(o: JsonValue.Obj) = FiscalCounter(

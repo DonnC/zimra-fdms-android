@@ -121,7 +121,9 @@ public class FiscalDevice(
         stateStore.write(
             snapshot.copy(
                 version = snapshot.version + 1,
-                state = snapshot.state.copy(currentDay = day.copy(status = FiscalDayStatus.CLOSE_REQUESTED)),
+                state = snapshot.state.copy(
+                    currentDay = day.copy(status = FiscalDayStatus.CLOSE_REQUESTED, closeReason = DayCloseReason.REQUESTED),
+                ),
             ),
         )
         true
@@ -161,17 +163,6 @@ public class FiscalDevice(
                 val problems = OriginalReceiptRules.check(prepared, original, now.toLocalDate())
                 if (problems.isNotEmpty()) return IssueResult.Refused(problems)
             }
-        }
-
-        if (state.lastGlobalNo >= numbering.limit && numbering.reset == GlobalNumberReset.NEVER) {
-            return IssueResult.Refused(
-                listOf(
-                    ReceiptProblem(
-                        null, "globalNo",
-                        "the device reached its global number limit (${numbering.limit}) and never restarts numbering",
-                    ),
-                ),
-            )
         }
 
         state = dayForReceipt(state, now)
@@ -280,7 +271,10 @@ public class FiscalDevice(
         val closing = when {
             day == null -> state.closingDays
             day.status == FiscalDayStatus.CLOSED -> state.closingDays
-            day.status.acceptsReceipts() -> state.closingDays + day.copy(status = FiscalDayStatus.CLOSE_REQUESTED)
+            day.status.acceptsReceipts() -> state.closingDays + day.copy(
+                status = FiscalDayStatus.CLOSE_REQUESTED,
+                closeReason = if (tooLong(day, now)) DayCloseReason.MAX_DAY_LENGTH else DayCloseReason.GLOBAL_NUMBER_LIMIT,
+            )
             else -> state.closingDays + day
         }
         val number = state.lastFiscalDayNo + 1

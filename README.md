@@ -91,24 +91,41 @@ within the app, and re-reads the saved state for every receipt.
 
 #### Global numbering
 
-The global number counts every receipt since the device was activated and
-continues across fiscal days. ZIMRA allows it to start again at 1 only once it
-becomes very big, and only with the first receipt of a new fiscal day, so
-fzimra only ever restarts it there. Choose how with `numbering`:
+The global number runs on across fiscal days. ZIMRA allows it to start again
+at 1 only with the first receipt of a fiscal day, and rejects a restart in the
+middle of one, so fzimra only ever restarts it when a new day begins. Choose
+when with `numbering`:
 
 ```kotlin
-Fzimra.device(context, configuration, signer, numbering = GlobalNumbering(GlobalNumberReset.NEVER))
+Fzimra.device(context, configuration, signer, numbering = GlobalNumbering(GlobalNumberReset.EVERY_FISCAL_DAY))
 ```
 
 | `GlobalNumberReset` | The global number starts again at 1 |
 |---|---|
-| `NEAR_LIMIT` (default) | in the first new fiscal day after it passes 90% of `limit`. If `limit` is reached during a day, that day is closed and a new one started, so the device never stops issuing. |
-| `NEVER` | never. Once `limit` is reached, receipts are refused. |
+| `NEAR_LIMIT` (default) | in the first new fiscal day after it passes 90% of `limit`, so normally on an ordinary day boundary. |
+| `EVERY_FISCAL_DAY` | in every new fiscal day. |
 
-`limit` defaults to the largest number a receipt can carry, so by default the
-numbers simply continue. Set it lower to restart earlier. Restarting every
-fiscal day is not offered: ZIMRA defines the global number as the running
-total of receipts since activation.
+`limit` defaults to `Int.MAX_VALUE` (2,147,483,647), the largest number a
+receipt can carry, so by default numbering simply continues: at 100,000
+receipts a day that lasts about 59 years. Set it lower to restart earlier, for
+example to keep printed numbers short.
+
+There is no option to stop issuing at the limit: the only number ZIMRA accepts
+after it is 1 in a new fiscal day. So if `limit` is reached during a day,
+under either policy, fzimra closes that day and the next sale opens a new one
+starting at 1. ZIMRA allows a day to be closed at any time and sets no
+minimum length. The closing day carries `closeReason =
+DayCloseReason.GLOBAL_NUMBER_LIMIT`; tell your users, since a Z report then
+appears during trading.
+
+#### Fiscal days and trading hours
+
+ZIMRA does not tie fiscal days to calendar days or business hours. A day
+lasts from its opening to its close, at most `dayMaxHours`; a day may run past
+midnight, and a date may have several days. Fit days to your trading hours by
+calling `requestDayClose()` when you close for the day: the next sale opens
+the next fiscal day. Every closing day in `DeviceState.closingDays` says why
+it closed (`REQUESTED`, `MAX_DAY_LENGTH` or `GLOBAL_NUMBER_LIMIT`).
 
 #### Credit and debit notes
 

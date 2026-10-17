@@ -78,6 +78,7 @@ internal fun sampleSnapshot(version: Long = 3, deviceId: Int = 7001) = FiscalSna
                 receiptCounter = 9,
                 lastReceiptHash = "day3+last=",
                 counters = listOf(FiscalCounter(FiscalCounterType.SALE_BY_TAX, "ZWG", d("120.50"), STANDARD, d("15"))),
+                closeReason = DayCloseReason.MAX_DAY_LENGTH,
             ),
         ),
     ),

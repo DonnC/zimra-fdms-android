@@ -56,6 +56,7 @@ class GlobalNumberingTest {
         assertEquals(1 to 2, next.globalNo to next.fiscalDayNo)
         val closing = device.state()!!.closingDays.single()
         assertEquals(1 to FiscalDayStatus.CLOSE_REQUESTED, closing.fiscalDayNo to closing.status)
+        assertEquals(DayCloseReason.GLOBAL_NUMBER_LIMIT, closing.closeReason)
     }
 
     @Test
@@ -78,15 +79,46 @@ class GlobalNumberingTest {
     }
 
     @Test
-    fun neverRefusesAtTheLimitWithoutUsingANumber() {
-        val device = device(GlobalNumbering(GlobalNumberReset.NEVER, limit = 2))
+    fun everyFiscalDayRestartsEachNewDay() {
+        val device = device(GlobalNumbering(GlobalNumberReset.EVERY_FISCAL_DAY))
         device.sell()
-        device.closeDay()
         assertEquals(2, device.sell().globalNo)
-        val refused = device.issue(invoice(listOf(bread(1, d("1.00"))))) as IssueResult.Refused
-        assertEquals("globalNo", refused.problems.single().field)
-        assertEquals(2, device.state()!!.lastGlobalNo)
-        assertEquals(2, device.pendingReceipts().size)
+        device.closeDay()
+        val next = device.sell()
+        assertEquals(1 to 2, next.globalNo to next.fiscalDayNo)
+        assertEquals(2, device.sell().globalNo)
+    }
+
+    @Test
+    fun everyPolicyKeepsIssuingAtTheLimit() {
+        GlobalNumberReset.entries.forEach { reset ->
+            stateStorage = InMemoryTextStorage()
+            val device = device(GlobalNumbering(reset, limit = 2))
+            repeat(2) { device.sell() }
+            val next = device.sell()
+            assertEquals("$reset", 1 to 2, next.globalNo to next.fiscalDayNo)
+            assertEquals("$reset", DayCloseReason.GLOBAL_NUMBER_LIMIT, device.state()!!.closingDays.single().closeReason)
+        }
+    }
+
+    @Test
+    fun continuingNearTheLargestNumberRestartsWithTheNewDay() {
+        val device = device(GlobalNumbering())
+        device.startFrom(Int.MAX_VALUE - 1, 7)
+        val first = device.sell()
+        assertEquals("past 90%: the new day starts at 1", 1 to 8, first.globalNo to first.fiscalDayNo)
+    }
+
+    @Test
+    fun theLargestGlobalNumberMidDayIsFollowedByANewDayAtOne() {
+        val open = FiscalDayState(8, start, FiscalDayStatus.OPENED, 3, "last=", emptyList())
+        TextStateStore(stateStorage).write(FiscalSnapshot(1, DeviceState(7001, Int.MAX_VALUE - 1, start, 8, open), emptyList()))
+        val device = device(GlobalNumbering())
+        val last = device.sell()
+        assertEquals(Int.MAX_VALUE to 8, last.globalNo to last.fiscalDayNo)
+        val next = device.sell()
+        assertEquals(1 to 9, next.globalNo to next.fiscalDayNo)
+        assertEquals(DayCloseReason.GLOBAL_NUMBER_LIMIT, device.state()!!.closingDays.single().closeReason)
     }
 
     @Test
@@ -112,7 +144,8 @@ class GlobalNumberingTest {
         assertFalse(GlobalNumbering(limit = 100).restartsAt(90))
         assertTrue(GlobalNumbering(limit = 100).restartsAt(91))
         assertFalse("the default limit keeps numbers running", GlobalNumbering().restartsAt(1_900_000_000))
-        assertFalse(GlobalNumbering(GlobalNumberReset.NEVER, 100).restartsAt(100))
+        assertTrue(GlobalNumbering(GlobalNumberReset.EVERY_FISCAL_DAY).restartsAt(1))
+        assertFalse(GlobalNumbering(GlobalNumberReset.EVERY_FISCAL_DAY).restartsAt(0))
         assertTrue("no overflow at the largest limit", GlobalNumbering().restartsAt(Int.MAX_VALUE))
     }
 }

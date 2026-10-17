@@ -10,10 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Global numbering (`GlobalNumbering`, `GlobalNumberReset`): choose when the
-  global number starts again at 1: near its limit (the default) or never.
-  Numbers continue across fiscal days; no daily restart is offered. A restart only happens with the first receipt of a
-  new fiscal day; reaching the limit during a day starts a new day, except
-  with `NEVER`, which refuses further receipts.
+  global number starts again at 1: near its limit (the default) or every new
+  fiscal day. A restart only happens with the first receipt of a new fiscal
+  day. There is no policy that stops issuing: if the limit (by default
+  `Int.MAX_VALUE`) is reached during a day, under either policy, the day is
+  closed and the next receipt starts a new day at 1.
+- `DayCloseReason` on every closing fiscal day: `REQUESTED`,
+  `MAX_DAY_LENGTH` or `GLOBAL_NUMBER_LIMIT`.
 - Credit and debit notes are checked against the original receipt: currency,
   age, taxes and, for credit notes, the amount left to credit after earlier
   notes. The original comes from the device's records, found by device

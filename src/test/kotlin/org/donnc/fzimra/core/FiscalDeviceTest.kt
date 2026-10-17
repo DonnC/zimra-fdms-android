@@ -160,6 +160,7 @@ class FiscalDeviceTest {
         val closing = state.closingDays.single()
         assertEquals(1, closing.fiscalDayNo)
         assertEquals(FiscalDayStatus.CLOSE_REQUESTED, closing.status)
+        assertEquals(DayCloseReason.REQUESTED, closing.closeReason)
         assertEquals(2, closing.receiptCounter)
         assertEquals(d("20.00"), FiscalCounters.total(closing.counters, FiscalCounterType.SALE_BY_TAX))
     }
@@ -179,6 +180,8 @@ class FiscalDeviceTest {
         val next = device.sell()
         assertEquals(2, next.fiscalDayNo)
         assertEquals(FiscalDayStatus.CLOSE_REQUESTED, device.state()!!.closingDays.single().status)
+        assertEquals(DayCloseReason.MAX_DAY_LENGTH, device.state()!!.closingDays.single().closeReason)
+        assertNull("an open day has no close reason", device.state()!!.currentDay!!.closeReason)
     }
 
     @Test

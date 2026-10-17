@@ -24,6 +24,22 @@ public enum class FiscalDayStatus {
     CLOSED,
 }
 
+/** Why a fiscal day is being closed. */
+public enum class DayCloseReason {
+    /** The app asked for it with `FiscalDevice.requestDayClose()`. */
+    REQUESTED,
+
+    /** The day was about to pass ZIMRA's maximum fiscal day length. */
+    MAX_DAY_LENGTH,
+
+    /**
+     * The global receipt number reached its limit during the day. Numbering
+     * may only start again at 1 in a new fiscal day, so the day was closed to
+     * keep issuing. Worth telling the user: a Z report appears mid-trading.
+     */
+    GLOBAL_NUMBER_LIMIT,
+}
+
 /**
  * The state of one fiscal day.
  *
@@ -31,6 +47,7 @@ public enum class FiscalDayStatus {
  * @property lastReceiptHash hash of the day's last receipt; `null` before the
  *   first receipt of the day.
  * @property counters the day's fiscal counters so far.
+ * @property closeReason why the day is being closed; `null` while it is open.
  */
 public data class FiscalDayState(
     val fiscalDayNo: Int,
@@ -39,6 +56,7 @@ public data class FiscalDayState(
     val receiptCounter: Int,
     val lastReceiptHash: String?,
     val counters: List<FiscalCounter>,
+    val closeReason: DayCloseReason? = null,
 )
 
 /**
