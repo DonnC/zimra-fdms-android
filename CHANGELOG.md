@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Keys and signing:
+  - `Signer` interface and `SignatureAlgorithm` (ECDSA P-256 or RSA, SHA-256);
+  - `FiscalSignature.sign` and `verify`: every signature is verified against
+    the device's public key before it is returned, so a faulty signer or a
+    signature in a format ZIMRA rejects is caught on the device;
+  - `DeviceKeys`: only EC P-256 and RSA keys of 2048 bits or more are accepted;
+  - `DeviceCsr`: the device's certificate signing request (PKCS #10, PEM),
+    with the subject ZIMRA expects;
+  - `KeystoreSigner`: a non-exportable EC P-256 key in Android Keystore,
+    StrongBox when available, with key attestation, security level, and
+    refusal of software-only keys by default.
+- Tests: signatures verified against the conformance vectors' public key,
+  certificate requests checked with an independent parser, wrong key types
+  and wrong signature formats refused; on-device Keystore tests.
 - Receipts in `org.donnc.fzimra.core`:
   - `ReceiptRequest`, `ReceiptLine`, `Payment`, `Buyer` and `OriginalReceipt`
     describe a sale, a credit note or a debit note with positive numbers in

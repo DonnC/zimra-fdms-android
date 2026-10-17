@@ -120,6 +120,50 @@ val lines = cart.items.toReceiptLines(toLine)
 `FiscalCounters.of(receipt)` gives the counters a prepared receipt adds to its
 fiscal day, and `FiscalCounters.merge(...)` adds up counters across receipts.
 
+### The device key
+
+The device key is an EC P-256 key generated inside Android Keystore. It cannot
+be exported: your app and fzimra only see its public key and the signatures
+it makes. StrongBox is used when the device supports the key's requirements;
+otherwise the trusted execution environment. A key held only in software is
+refused unless you allow it (for emulators).
+
+```kotlin
+val signer = KeystoreSigner.getOrCreate(
+    alias = "fzimra-device-674473",
+    attestationChallenge = challengeFromYourServer, // optional, used when the key is created
+)
+signer.securityLevel     // STRONGBOX, TRUSTED_ENVIRONMENT, ...
+signer.certificateChain  // key attestation chain, for your server to check
+```
+
+One alias holds one device key. Deleting it (`KeystoreSigner.delete`) is
+irreversible: the device must then be registered with ZIMRA again.
+
+### Certificate request
+
+ZIMRA issues the device certificate from a certificate signing request made
+with the device key:
+
+```kotlin
+val csrPem = DeviceCsr.create(signer, serialNo = "FP9320-2026-XYZ01", deviceId = 674473)
+```
+
+### Signing
+
+`FiscalSignature.sign` signs a string built by `SignatureStrings` and returns
+its hash and signature. Every signature is verified against the device's
+public key before it is returned, so a faulty signer fails on the device
+rather than at ZIMRA.
+
+```kotlin
+val signature = FiscalSignature.sign(signer, canonical)
+signature.hash       // Base64 SHA-256 of the signed text
+signature.signature  // Base64 signature
+```
+
+`Signer` is an interface: implement it only to use another secure key store.
+
 ### Signing primitives
 
 All amounts are `java.math.BigDecimal`. Amounts that are signed must be whole
@@ -225,8 +269,10 @@ outside Android. A unit test (`CorePurityTest`) fails the build if it does.
 
 ## Testing
 
-`./gradlew test` runs the unit tests on the JVM. Signing strings, hashes and QR
-codes are checked against:
+`./gradlew test` runs the unit tests on the JVM. With a device or emulator
+connected, `./gradlew connectedAndroidTest` runs the Android Keystore tests.
+
+Signing strings, hashes, signatures and QR codes are checked against:
 
 - the worked examples in ZIMRA's specification;
 - conformance vectors verified on ZIMRA's test environment

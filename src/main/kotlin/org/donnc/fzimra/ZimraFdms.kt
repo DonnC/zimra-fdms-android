@@ -7,9 +7,10 @@ package org.donnc.fzimra
  * One library, two packages:
  *
  * - [org.donnc.fzimra.core]: fiscal logic in plain Kotlin, with no Android
- *   imports, tested on the JVM: exact money, the strings ZIMRA signs, hashes,
- *   and the receipt QR and verification codes.
- * - [org.donnc.fzimra.android]: Android platform integrations.
+ *   imports, tested on the JVM: exact money, receipts, the strings ZIMRA
+ *   signs, signatures, certificate requests, and the receipt QR and
+ *   verification codes.
+ * - [org.donnc.fzimra.android]: the device key in Android Keystore.
  */
 public object ZimraFdms {
     /** Version of the ZIMRA Fiscal Device Gateway API this SDK implements. */

@@ -192,4 +192,29 @@ class VectorConformanceTest {
         }
         assertEquals(5, checked)
     }
+
+    private val vectorPublicKey by lazy { SoftwareSigner.publicKeyFromPem(vectors.text("publicKeyPem")) }
+
+    @Test
+    fun vectorSignaturesVerify() {
+        var checked = 0
+        for (key in listOf("receipts", "fiscalDays")) {
+            vectors.array(key).objects { vector ->
+                assertTrue(vector.text("name"), FiscalSignature.verify(vectorPublicKey, vector.text("canonical"), vector.text("signature")))
+                checked++
+            }
+        }
+        assertEquals(8, checked)
+    }
+
+    @Test
+    fun ourSignaturesWithTheVectorKeyVerify() {
+        // ECDSA signatures are randomised, so a port verifies its own signatures rather than comparing bytes.
+        val signer = SoftwareSigner.fromPem(vectors.text("privateKeyPem"), vectors.text("publicKeyPem"))
+        vectors.array("receipts").objects { vector ->
+            val signature = FiscalSignature.sign(signer, vector.text("canonical"))
+            assertEquals(vector.text("hash"), signature.hash)
+            assertTrue(FiscalSignature.verify(vectorPublicKey, vector.text("canonical"), signature.signature))
+        }
+    }
 }

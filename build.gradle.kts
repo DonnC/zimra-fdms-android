@@ -15,6 +15,7 @@ android {
         // is used when the device has it.
         minSdk = 26
         consumerProguardFiles("consumer-rules.pro")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -24,6 +25,12 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = false
+    }
+
+    packaging {
+        // Only the on-device test APK packages dependencies: BouncyCastle's jars
+        // each carry the same licence and OSGi files. Keep one copy.
+        resources.pickFirsts += setOf("META-INF/LICENSE.md", "META-INF/versions/9/OSGI-INF/MANIFEST.MF")
     }
 }
 
@@ -36,4 +43,11 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // Reads the JSON test vectors, keeping numbers exact; not shipped with the library.
     testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    // Parses and verifies the certificate requests fzimra writes; not shipped with the library.
+    testImplementation("org.bouncycastle:bcpkix-jdk18on:1.86")
+
+    // On-device tests of the Android Keystore integration (./gradlew connectedAndroidTest).
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("org.bouncycastle:bcpkix-jdk18on:1.86")
 }
