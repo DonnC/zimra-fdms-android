@@ -11,6 +11,9 @@ The first release.
 
 ### Added
 
+- Documentation rewritten around the terminal: a short README, a task
+  guide (`docs/guide.md`), troubleshooting by symptom
+  (`docs/troubleshooting.md`) and the lower-level API (`docs/advanced.md`).
 - `FiscalTerminal`, the whole SDK in one object: `Fzimra.terminal(context,
   device, gateway)`, then `register`, `sell`, `refund`, `closeDay`, `status`
   and `addListener`. It creates the device key and certificate itself, keeps

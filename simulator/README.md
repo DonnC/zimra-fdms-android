@@ -19,16 +19,21 @@ testImplementation(project(":simulator"))
 
 ## Usage
 
+Use it as the terminal's gateway:
+
 ```kotlin
-val simulator = FdmsSimulator(store = SimulatorStore.InFile(File(context.noBackupFilesDir, "simulator.json")))
-val zimra = simulator.client(identity, clientCertificate = { signer.certificateChain.firstOrNull()?.takeIf { signer.hasZimraCertificate } })
+val terminal = Fzimra.terminal(context, device, SimulatorGateway.shared(context))
+terminal.register("ANY8CHAR")
 ```
 
-`zimra` is an ordinary `FdmsClient`: register with any eight-character
-activation key, then use it exactly as you would with ZIMRA, including with
-`FiscalSync` and background sync. `clientCertificate` stands in for mutual
-TLS: device requests must present a certificate the simulator issued to that
-device.
+Any eight-character activation key works. Everything else is as with ZIMRA.
+`SimulatorGateway.shared(context).simulator` is the simulator itself, for its
+faults and what it has received.
+
+In JVM tests, use `FdmsSimulator()` directly: `simulator.client(identity,
+clientCertificate = { … })` is an ordinary `FdmsClient`. The client
+certificate stands in for mutual TLS: device requests must present a
+certificate the simulator issued to that device.
 
 ## What it checks
 

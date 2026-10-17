@@ -46,86 +46,33 @@ Each mode keeps its own device, key and receipts.
 ## Integrating fzimra into your POS
 
 The example's whole use of fzimra is in
-[`FiscalEngine`](src/main/kotlin/org/donnc/fzimra/example/fiscal/FiscalEngine.kt).
-The screens only call it. To fiscalise your own app, do the same in four steps.
-
-### 1. Add the libraries
-
-```kotlin
-dependencies {
-    implementation(project(":"))                 // fzimra
-    debugImplementation(project(":simulator"))  // only if you want the simulator
-}
-```
-
-### 2. Register the device once
+[`FiscalEngine`](src/main/kotlin/org/donnc/fzimra/example/fiscal/FiscalEngine.kt):
+pick a gateway, get the terminal, show its status. The rest of the app is
+UI. In your own app:
 
 ```kotlin
-val identity = DeviceIdentity(deviceId, serialNo, modelName, modelVersion)
-val signer = KeystoreSigner.getOrCreate("pos-device-$deviceId")
-val zimra = Fzimra.client(identity, signer, FdmsEnvironment.TEST, clock)
+// Application.onCreate
+val terminal = Fzimra.terminal(this, DeviceIdentity(deviceId, serialNo, modelName, modelVersion), ZimraGateway.TEST)
 
-val taxpayer = zimra.verifyTaxpayerInformation(activationKey)  // confirm with the user
-val issued = zimra.registerDevice(activationKey, DeviceCsr.create(signer, identity.serialNo, identity.deviceId))
-signer.installCertificate(issued.certificatePem, identity)
-val configuration = zimra.getConfig()                           // keep it: taxes, QR URL, limits
-```
+// once
+terminal.register(activationKey)
 
-### 3. Issue receipts from your own item model
-
-```kotlin
-val device = Fzimra.device(context, configuration.toDeviceConfiguration(deviceId), signer, clock = clock)
-
+// each sale: your cart, mapped to receipt lines
 val mapper = ReceiptLineMapper<CartLine> { line ->
-    ReceiptLine.sale(line.product.name, line.quantity, line.product.price, taxIds.getValue(line.product.taxClass), line.product.hsCode)
+    ReceiptLine.sale(line.product.name, line.quantity, line.product.price, terminal.taxes.standard, line.product.hsCode)
 }
-when (val result = device.issue(ReceiptRequest(ReceiptType.FISCAL_INVOICE, "USD", invoiceNo, cart.toReceiptLines(mapper), listOf(Payment.cash())))) {
-    is IssueResult.Issued -> print(result.receipt)            // QR code, verification code, numbers
-    is IssueResult.Refused -> show(result.problems)          // nothing was issued
-}
+terminal.sell(cart.toReceiptLines(mapper), listOf(Payment.cash()))
+
+// end of trading
+terminal.closeDay()
 ```
 
-Your product, cart and payment types stay as they are: the mapper is the
-only bridge. Look ZIMRA's tax IDs up in the configuration by rate, as
-[`Catalogue.taxIds`](src/main/kotlin/org/donnc/fzimra/example/fiscal/Catalogue.kt)
-does. ZIMRA assigns them per taxpayer, so never hard-code them.
-
-### 4. Install background sync in your Application
-
-```kotlin
-class PosApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        FzimraBackground.install(onReport = { _, report -> upload(report.accepted) }) { context, deviceId ->
-            FiscalSync(myDevice(context, deviceId), myClient(context, deviceId))
-        }
-    }
-}
-```
-
-From then on every sale reaches ZIMRA as soon as the network allows, even
-when the app is closed. Fiscal days open with the first sale and close when
-you call `device.requestDayClose()` (for example at the end of trading),
-before ZIMRA's maximum day length, or when the global number limit or VAT
-registration requires it.
-
-### Things a POS must also do
-
-- **Show the cashier when the fiscal day is about to end.** ZIMRA requires it;
-  see `DayNotice` in the Sell screen.
-- **Ping ZIMRA while the app is open**, at the interval `ping()` returns; see
-  `FiscalEngine.pingWhileOpen`.
-- **Renew the certificate before it expires**; see the Setup screen.
-- **Keep your own copy of receipts.** fzimra keeps records of accepted
-  receipts for 7 days; `onReport` gives you each accepted one to send to your
-  server.
-- **Tell someone when sync is `BLOCKED`.** A refused receipt or a day with
-  Red receipts needs a person; `SyncReport.problems` says what.
+The [guide](../docs/guide.md) covers every option.
 
 ## Inside
 
 | Package | What it holds |
 |---|---|
-| `fiscal` | `FiscalEngine` (the integration), `Catalogue` (the shop's own model and its mapper), `ConfigurationStore`, `TrafficLog` |
+| `fiscal` | `FiscalEngine` (the integration), `Catalogue` (the shop's own model and its mapper), `TrafficLog` (an `FdmsObserver`) |
 | `settings` | Modes and device details, kept with DataStore |
 | `ui` | Jetpack Compose screens with a ViewModel each, Material 3 |
