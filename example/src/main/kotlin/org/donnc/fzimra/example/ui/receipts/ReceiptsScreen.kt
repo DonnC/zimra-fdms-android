@@ -125,7 +125,7 @@ private fun ReceiptDetail(engine: FiscalEngine, record: ReceiptRecord, onClose: 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth(0.94f).padding(vertical = 24.dp)) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ReceiptView(record.receipt, state.configuration, record)
+                ReceiptView(record.receipt, state.status?.configuration, record)
                 outcome?.let { Banner(it, kind = BannerKind.INFO) }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (refundable) OutlinedButton(onClick = { askReason = true }, modifier = Modifier.weight(1f)) { Text("Refund") }

@@ -83,14 +83,14 @@ fun SellScreen(engine: FiscalEngine, onSetup: () -> Unit) {
     var checkout by remember { mutableStateOf(false) }
     // The sheet stays open while issuing, so a refusal is shown where the sale was made.
     LaunchedEffect(ui.issued) { if (ui.issued != null) checkout = false }
-    val taxIds = remember(state.configuration) { Catalogue.taxIds(state.configuration!!.taxes) }
+    val taxes = remember(state.status?.configuration) { engine.terminal?.taxes }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(state.configuration?.branch?.name ?: "Till") },
+            title = { Text(state.status?.configuration?.branch?.name ?: "Till") },
             actions = { SyncChip(state); Spacer(Modifier.width(12.dp)) },
         )
-        DayNotice(state, engine)
+        DayNotice(state)
         LazyVerticalGrid(
             columns = GridCells.Adaptive(150.dp),
             contentPadding = PaddingValues(16.dp),
@@ -99,7 +99,7 @@ fun SellScreen(engine: FiscalEngine, onSetup: () -> Unit) {
             modifier = Modifier.weight(1f),
         ) {
             items(Catalogue.products, key = { it.sku }) { product ->
-                ProductTile(product, ui.quantityOf(product), available = product.taxClass in taxIds, currency = ui.currency, onAdd = { model.add(product) })
+                ProductTile(product, ui.quantityOf(product), available = taxes != null && Catalogue.tax(taxes, product.taxClass) != null, currency = ui.currency, onAdd = { model.add(product) })
             }
         }
         AnimatedVisibility(ui.cart.isNotEmpty()) {
@@ -124,7 +124,7 @@ fun SellScreen(engine: FiscalEngine, onSetup: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     ui.warnings.forEach { Banner("Not checked", it.message, BannerKind.WARNING) }
-                    ReceiptView(receipt, state.configuration, record)
+                    ReceiptView(receipt, state.status?.configuration, record)
                     Button(onClick = model::dismissReceipt, modifier = Modifier.fillMaxWidth()) { Text("New sale") }
                 }
             }
@@ -248,21 +248,24 @@ private fun Stepper(quantity: Int, onMinus: () -> Unit, onPlus: () -> Unit) {
 /** How the receipts stand with ZIMRA, at a glance. */
 @Composable
 fun SyncChip(state: EngineState) {
+    val status = state.status
     when {
         state.isSyncing -> StatusPill("Sending…", Tone.WAITING)
-        state.pendingReceipts > 0 -> StatusPill("${state.pendingReceipts} waiting", Tone.WARNING)
-        state.lastSync?.outcome == org.donnc.fzimra.core.SyncOutcome.BLOCKED -> StatusPill("Needs attention", Tone.BAD)
+        status == null -> {}
+        status.problems.isNotEmpty() -> StatusPill("Needs attention", Tone.BAD)
+        status.pendingReceipts > 0 -> StatusPill("${status.pendingReceipts} waiting", Tone.WARNING)
         else -> StatusPill("All sent", Tone.GOOD)
     }
 }
 
 /** ZIMRA requires warning the cashier before the fiscal day's maximum length. */
 @Composable
-private fun DayNotice(state: EngineState, engine: FiscalEngine) {
-    val day = state.state?.currentDay ?: return
-    val configuration = state.configuration ?: return
-    val left = Duration.between(engine.clock.now(), day.openedAt.plusHours(configuration.dayMaxHours.toLong()))
-    if (left.toHours() < configuration.dayEndNotificationHours) {
+private fun DayNotice(state: EngineState) {
+    val status = state.status ?: return
+    val day = status.day ?: return
+    val endsAt = status.dayEndsAt ?: return
+    if (status.isDayEndingSoon) {
+        val left = Duration.between(java.time.LocalDateTime.now(java.time.ZoneId.of("Africa/Harare")), endsAt)
         Box(Modifier.padding(horizontal = 16.dp)) {
             Banner(
                 "Fiscal day ${day.fiscalDayNo} ends in ${hoursAndMinutes(left)}",

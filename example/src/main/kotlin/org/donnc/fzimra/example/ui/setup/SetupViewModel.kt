@@ -45,7 +45,7 @@ class SetupViewModel(private val engine: FiscalEngine) : ViewModel() {
     /** Saves the form, then asks ZIMRA who the device belongs to. */
     fun verify(mode: Mode) = run("Asking ZIMRA who this device belongs to") {
         engine.saveDevice(mode, mutable.value.form)
-        val taxpayer = engine.verifyTaxpayer(mutable.value.activationKey)
+        val taxpayer = engine.checkTaxpayer(mutable.value.activationKey)
         mutable.update { it.copy(taxpayer = taxpayer) }
     }
 
@@ -56,23 +56,12 @@ class SetupViewModel(private val engine: FiscalEngine) : ViewModel() {
 
     /** The simulator accepts any eight-character activation key. */
     fun setUpSimulator() = run("Setting up the simulated device") {
-        engine.verifyTaxpayer(SIMULATOR_KEY)
         engine.register(SIMULATOR_KEY)
         mutable.update { it.copy(message = "The simulated device is ready. Make a sale!") }
     }
 
-    fun refreshConfiguration() = run("Fetching ZIMRA's configuration") {
-        engine.refreshConfiguration()
-        mutable.update { it.copy(message = "Configuration updated from ZIMRA.") }
-    }
-
-    fun renewCertificate() = run("Renewing the certificate") {
-        engine.renewCertificate()
-        mutable.update { it.copy(message = "A new certificate is installed.") }
-    }
-
     fun reset() = run("Removing the device from this phone") {
-        engine.resetDevice()
+        engine.unregister()
         mutable.update { it.copy(message = "The device was removed from this phone.") }
     }
 

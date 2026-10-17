@@ -77,14 +77,10 @@ fun DayScreen(engine: FiscalEngine, onSetup: () -> Unit) {
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             message?.let { Banner(it, kind = BannerKind.INFO, action = { TextButton(onClick = { message = null }) { Text("Dismiss") } }) }
-            if (state.integrityProblems.isNotEmpty()) {
-                Banner("Fiscal data failed its integrity checks", state.integrityProblems.joinToString("\n"), BannerKind.ERROR)
-            }
-
-            CurrentDay(state, engine, onClose = { confirmClose = true }, onRetry = { no -> act { if (engine.retryDayClose(no)) "The close will be sent again." else null } })
-            state.state?.closingDays?.forEach { ClosingDay(it) }
-            SyncCard(state, engine) { act { engine.syncNow()?.let { r -> "Sync: " + describe(r.outcome) } } }
-            state.state?.currentDay?.let { Counters(it) }
+            CurrentDay(state, onClose = { confirmClose = true }, onRetry = { act { if (engine.retryDayClose()) { engine.syncNow(); "The close was sent again." } else null } })
+            state.status?.closingDays?.forEach { ClosingDay(it) }
+            SyncCard(state) { act { "Sync: " + describe(engine.syncNow().outcome) } }
+            state.status?.day?.let { Counters(it) }
             if (state.mode == Mode.SIMULATOR) SimulatorControls(state, engine)
         }
     }
@@ -92,12 +88,12 @@ fun DayScreen(engine: FiscalEngine, onSetup: () -> Unit) {
     if (confirmClose) {
         AlertDialog(
             onDismissRequest = { confirmClose = false },
-            title = { Text("Close fiscal day ${state.state?.currentDay?.fiscalDayNo}?") },
+            title = { Text("Close fiscal day ${state.status?.day?.fiscalDayNo}?") },
             text = { Text("ZIMRA closes the day once every receipt has reached it, and the Z report is final. The next sale opens a new day.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmClose = false
-                    act { if (engine.requestDayClose()) { engine.syncNow(); "The day's close was sent to ZIMRA." } else "There is no open day to close." }
+                    act { if (engine.closeDay()) "The day's close was sent to ZIMRA." else "There is no open day to close." }
                 }) { Text("Close day") }
             },
             dismissButton = { TextButton(onClick = { confirmClose = false }) { Text("Not yet") } },
@@ -123,18 +119,20 @@ private fun dayStatus(day: FiscalDayState): Pair<String, Tone> = when (day.statu
 }
 
 @Composable
-private fun CurrentDay(state: EngineState, engine: FiscalEngine, onClose: () -> Unit, onRetry: (Int) -> Unit) {
-    val day = state.state?.currentDay
+private fun CurrentDay(state: EngineState, onClose: () -> Unit, onRetry: () -> Unit) {
+    val status = state.status
+    val day = status?.day
     if (day == null) {
-        SectionCard("Fiscal day") { Text("The first sale opens fiscal day ${(state.state?.lastFiscalDayNo ?: 0) + 1}.") }
+        SectionCard("Fiscal day") { Text("The next sale opens a new fiscal day.") }
         return
     }
     val (text, tone) = dayStatus(day)
     SectionCard("Fiscal day ${day.fiscalDayNo}", action = { StatusPill(text, tone) }) {
         InfoRow("Opened", dateTime(day.openedAt))
         InfoRow("Receipts", day.receiptCounter.toString())
-        InfoRow("Last global number", state.state?.lastGlobalNo?.toString() ?: "—")
-        state.configuration?.let { InfoRow("Must close by", dateTime(day.openedAt.plusHours(it.dayMaxHours.toLong()))) }
+        InfoRow("Last global number", status.lastGlobalNo.toString())
+        status.dayEndsAt?.let { InfoRow("Must close by", dateTime(it)) }
+        if (status.isDayEndingSoon) Banner("The day is ending", "ZIMRA's maximum day length is near: close the day.", BannerKind.WARNING)
         day.closeReason?.let { InfoRow("Closing because", reason(it)) }
         day.closingErrorCode?.let { Banner("ZIMRA refused the close: $it", "Fix the cause, then send the close again.", BannerKind.ERROR) }
         if (day.blockingReceipts > 0) {
@@ -143,7 +141,7 @@ private fun CurrentDay(state: EngineState, engine: FiscalEngine, onClose: () -> 
         when (day.status) {
             FiscalDayStatus.OPENED, FiscalDayStatus.OPEN_PENDING ->
                 if (day.receiptCounter > 0) Button(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text("Close fiscal day") }
-            FiscalDayStatus.CLOSE_FAILED -> Button(onClick = { onRetry(day.fiscalDayNo) }, modifier = Modifier.fillMaxWidth()) { Text("Send the close again") }
+            FiscalDayStatus.CLOSE_FAILED -> Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Send the close again") }
             else -> {}
         }
     }
@@ -168,13 +166,15 @@ private fun ClosingDay(day: FiscalDayState) {
 }
 
 @Composable
-private fun SyncCard(state: EngineState, engine: FiscalEngine, onSync: () -> Unit) {
+private fun SyncCard(state: EngineState, onSync: () -> Unit) {
+    val status = state.status ?: return
+    val now = java.time.LocalDateTime.now(java.time.ZoneId.of("Africa/Harare"))
     SectionCard("With ZIMRA") {
-        InfoRow("Waiting to send", "${state.pendingReceipts} receipt${if (state.pendingReceipts == 1) "" else "s"}")
-        state.oldestUnsent?.let { InfoRow("Oldest waiting", "issued ${ago(it, engine.clock.now())}") }
-        state.lastSync?.let { report ->
-            InfoRow("Last sync", (state.lastSyncAt?.let { ago(it, engine.clock.now()) } ?: "") + " · " + describe(report.outcome))
-            report.problems.forEach { Banner("Needs attention", it, BannerKind.ERROR) }
+        InfoRow("Waiting to send", "${status.pendingReceipts} receipt${if (status.pendingReceipts == 1) "" else "s"}")
+        status.oldestPendingDate?.let { InfoRow("Oldest waiting", "issued ${ago(it, now)}") }
+        status.problems.forEach { Banner("Needs attention", it, BannerKind.ERROR) }
+        status.lastSync?.let { report ->
+            InfoRow("Last sync", describe(report.outcome))
             report.closedDays.forEach { closed ->
                 Banner(
                     "Fiscal day ${closed.day.fiscalDayNo} closed by ZIMRA",

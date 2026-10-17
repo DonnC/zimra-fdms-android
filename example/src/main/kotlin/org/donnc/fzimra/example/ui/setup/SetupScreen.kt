@@ -41,7 +41,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import org.donnc.fzimra.android.KeySecurityLevel
 import org.donnc.fzimra.example.fiscal.EngineState
 import org.donnc.fzimra.example.fiscal.FiscalEngine
 import org.donnc.fzimra.example.settings.Mode
@@ -86,8 +85,8 @@ fun SetupScreen(engine: FiscalEngine, onReady: () -> Unit) {
 
             ModeChooser(state.mode, enabled = ui.busy == null, onSelect = model::selectMode)
 
-            if (state.isRegistered) {
-                RegisteredDevice(state, busy = ui.busy != null, onRefresh = model::refreshConfiguration, onRenew = model::renewCertificate, onReset = { confirmReset = true })
+            if (state.isReady) {
+                RegisteredDevice(state, busy = ui.busy != null, onReset = { confirmReset = true })
             } else if (state.mode == Mode.SIMULATOR) {
                 SimulatorSetup(state, ui, onSetUp = model::setUpSimulator)
             } else {
@@ -106,7 +105,7 @@ fun SetupScreen(engine: FiscalEngine, onReady: () -> Unit) {
             text = {
                 Text(
                     "This deletes the device key, fiscal state and receipt records from this phone." +
-                        if (state.pendingReceipts > 0) " ${state.pendingReceipts} receipt(s) ZIMRA has not received will be lost." else "",
+                        (state.status?.pendingReceipts ?: 0).let { if (it > 0) " $it receipt(s) ZIMRA has not received will be lost." else "" },
                 )
             },
             confirmButton = { TextButton(onClick = { confirmReset = false; model.reset() }) { Text("Remove") } },
@@ -205,26 +204,18 @@ private fun ZimraSetup(mode: Mode, ui: SetupUi, model: SetupViewModel) {
 }
 
 @Composable
-private fun RegisteredDevice(state: EngineState, busy: Boolean, onRefresh: () -> Unit, onRenew: () -> Unit, onReset: () -> Unit) {
-    val configuration = state.configuration
+private fun RegisteredDevice(state: EngineState, busy: Boolean, onReset: () -> Unit) {
+    val configuration = state.status?.configuration
     SectionCard("Device", action = { StatusPill("Registered", Tone.GOOD) }) {
         InfoRow("Mode", state.mode.title)
         InfoRow("Device ID", state.device.deviceId.toString())
         InfoRow("Serial number", state.device.serialNo)
         InfoRow("Model", "${state.device.modelName} ${state.device.modelVersion}")
-        InfoRow(
-            "Device key",
-            when (state.keySecurity) {
-                KeySecurityLevel.STRONGBOX -> "StrongBox secure chip"
-                KeySecurityLevel.TRUSTED_ENVIRONMENT -> "Secure hardware (TEE)"
-                KeySecurityLevel.SOFTWARE -> "Software only (emulator)"
-                else -> "Android Keystore"
-            },
-        )
-        state.certificateExpiry?.let { expiry ->
+        InfoRow("Device key", "Android Keystore")
+        state.status?.certificateExpiry?.let { expiry ->
             val days = Duration.between(Instant.now(), expiry).toDays()
             InfoRow("Certificate", "valid till ${DateTimeFormatter.ofPattern("d MMM yyyy").format(expiry.atZone(ZoneId.systemDefault()))}")
-            if (days < 30) Banner("The certificate expires in $days days", "ZIMRA refuses every request after it expires. Renew it now.", BannerKind.WARNING)
+            if (days < 30) Banner("The certificate expires in $days days", "It is renewed automatically while the app is open and online.", BannerKind.WARNING)
         }
     }
     configuration?.let { c ->
@@ -240,10 +231,10 @@ private fun RegisteredDevice(state: EngineState, busy: Boolean, onRefresh: () ->
         }
     }
     SectionCard("Maintenance") {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onRefresh, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Refresh config") }
-            OutlinedButton(onClick = onRenew, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Renew certificate") }
-        }
+        Text(
+            "fzimra refreshes ZIMRA's configuration before each fiscal day, reports the device online and renews the certificate on its own.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         TextButton(onClick = onReset, enabled = !busy) { Text("Remove device from this phone", color = MaterialTheme.colorScheme.error) }
     }
 }
@@ -252,9 +243,8 @@ private fun RegisteredDevice(state: EngineState, busy: Boolean, onRefresh: () ->
 private fun IntegrationNote() {
     SectionCard("Using fzimra in your POS") {
         Text(
-            "Everything this app does with fzimra lives in one class, FiscalEngine. Copy it into your app, " +
-                "map your own item model with ReceiptLineMapper, and install background sync in your Application. " +
-                "The example's README walks through it.",
+            "The whole integration is one FiscalTerminal from Fzimra.terminal(...): register once, then sell, refund " +
+                "and close the day. Your own item model maps to receipt lines with ReceiptLineMapper. See the example's README.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

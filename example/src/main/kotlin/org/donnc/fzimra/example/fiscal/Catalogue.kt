@@ -3,6 +3,7 @@ package org.donnc.fzimra.example.fiscal
 import org.donnc.fzimra.core.ReceiptLine
 import org.donnc.fzimra.core.ReceiptLineMapper
 import org.donnc.fzimra.core.TaxDefinition
+import org.donnc.fzimra.core.Taxes
 import java.math.BigDecimal
 
 /** How a product is taxed, in the shop's own terms. */
@@ -12,10 +13,7 @@ enum class TaxClass(val label: String) {
     EXEMPT("Exempt"),
 }
 
-/**
- * A product in the shop's own model. It knows nothing of fzimra: the
- * [mapper] below turns cart lines into receipt lines.
- */
+/** A product in the shop's own model. It knows nothing of fzimra. */
 data class Product(
     val sku: String,
     val name: String,
@@ -39,19 +37,18 @@ object Catalogue {
         Product("PILL-30", "Paracetamol 30s", BigDecimal("2.20"), TaxClass.EXEMPT, "30049000", "💊"),
     )
 
-    /**
-     * ZIMRA's tax for each [TaxClass], found in the device's configuration by
-     * rate. ZIMRA assigns its own tax IDs, so they are never hard-coded.
-     */
-    fun taxIds(taxes: List<TaxDefinition>): Map<TaxClass, Int> = buildMap {
-        taxes.filter { it.percent != null && it.percent!!.signum() > 0 }.maxByOrNull { it.percent!! }?.let { put(TaxClass.STANDARD, it.taxId) }
-        taxes.firstOrNull { it.percent != null && it.percent!!.signum() == 0 }?.let { put(TaxClass.ZERO_RATED, it.taxId) }
-        taxes.firstOrNull { it.percent == null }?.let { put(TaxClass.EXEMPT, it.taxId) }
-    }
+    /** ZIMRA's tax for the shop's tax class, from the terminal's configuration. */
+    fun tax(taxes: Taxes, taxClass: TaxClass): TaxDefinition? = runCatching {
+        when (taxClass) {
+            TaxClass.STANDARD -> taxes.standard
+            TaxClass.ZERO_RATED -> taxes.zeroRated
+            TaxClass.EXEMPT -> taxes.exempt
+        }
+    }.getOrNull()
 
-    /** The shop's cart lines as receipt lines. */
-    fun mapper(taxIds: Map<TaxClass, Int>): ReceiptLineMapper<CartLine> = ReceiptLineMapper { line ->
-        val taxId = taxIds[line.product.taxClass] ?: error("ZIMRA has no ${line.product.taxClass.label} tax for this device")
-        ReceiptLine.sale(line.product.name, line.quantity, line.product.price, taxId, line.product.hsCode)
+    /** The only bridge between the shop's cart and fzimra. */
+    fun mapper(taxes: Taxes): ReceiptLineMapper<CartLine> = ReceiptLineMapper { line ->
+        val tax = tax(taxes, line.product.taxClass) ?: error("ZIMRA has no ${line.product.taxClass.label} tax for this taxpayer")
+        ReceiptLine.sale(line.product.name, line.quantity, line.product.price, tax, line.product.hsCode)
     }
 }
