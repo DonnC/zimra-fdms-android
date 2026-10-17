@@ -23,8 +23,9 @@ Gateway API* (FDMS) v7.2.
 
 ## Project status
 
-Pre-release. The public API has not been published and may change without
-notice until version 1.0. Changes are recorded in the [changelog](CHANGELOG.md).
+Version 0.1.0, the first release, is not yet on a public Maven repository.
+The API may still change before 1.0; every change is recorded in the
+[changelog](CHANGELOG.md).
 
 ## Requirements
 
@@ -32,12 +33,33 @@ notice until version 1.0. Changes are recorded in the [changelog](CHANGELOG.md).
 |---|---|
 | Android | 8.0 (API level 26) or later |
 | Build JDK | 17 or later |
-| Android SDK | Platform 36 |
+| Android SDK | Platform 36 (the example app compiles against 37) |
 
 ## Installation
 
-fzimra is not yet published to a Maven repository. Until it is, build the
-library from source and depend on the resulting AAR.
+fzimra is not yet on a public Maven repository. Until it is, publish it to a
+repository on your machine and depend on it from there:
+
+```bash
+./gradlew publishAllPublicationsToLocalRepository   # writes build/repository
+```
+
+```kotlin
+// settings.gradle.kts of your app
+dependencyResolutionManagement {
+    repositories {
+        maven { url = uri("/path/to/zimra-fdms-android/build/repository") }
+    }
+}
+
+// build.gradle.kts of your app module
+dependencies {
+    implementation("org.donnc:fzimra:0.1.0")
+    debugImplementation("org.donnc:fzimra-simulator:0.1.0") // optional
+}
+```
+
+fzimra itself depends only on the Kotlin standard library.
 
 ## Usage
 
@@ -624,18 +646,21 @@ with Android Studio.
 
    ```bash
    export JAVA_HOME=/path/to/jdk
-   ./gradlew build   # compile, lint and run the unit tests
+   ./gradlew build   # compile, lint and run the unit tests of every module
    ./gradlew test    # unit tests only
+   ./gradlew :example:installDebug   # the example app, on a connected device
    ```
 
-The library is written to `build/outputs/aar/`.
+The library is written to `build/outputs/aar/`, the simulator to
+`simulator/build/outputs/aar/`.
 
 The Gradle wrapper pins the checksum of the Gradle distribution, so a modified
 download is refused.
 
 ## Project structure
 
-fzimra is a single Android library, organised in two packages:
+fzimra is one Android library, organised in two packages, with an optional
+simulator library and an example app beside it:
 
 ```
 src/main/kotlin/org/donnc/fzimra/

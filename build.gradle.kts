@@ -1,13 +1,14 @@
 plugins {
     // AGP 9 compiles Kotlin itself (built-in Kotlin), so no separate Kotlin plugin.
     id("com.android.library") version "9.4.1"
+    `maven-publish`
     // For the example app only.
     id("com.android.application") version "9.4.1" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.10" apply false
 }
 
 group = "org.donnc"
-version = "0.1.0-SNAPSHOT"
+version = "0.1.0"
 
 android {
     namespace = "org.donnc.fzimra"
@@ -30,6 +31,13 @@ android {
         unitTests.isReturnDefaultValues = false
     }
 
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+
     packaging {
         // Only the on-device test APK packages dependencies: BouncyCastle's jars
         // each carry the same licence and OSGi files. Keep one copy.
@@ -40,6 +48,45 @@ android {
 kotlin {
     jvmToolchain(17)
     explicitApi() // every public declaration states its visibility: the contract is deliberate
+}
+
+publishing {
+    publications {
+        register<MavenPublication>("release") {
+            groupId = "org.donnc"
+            artifactId = "fzimra"
+            version = project.version.toString()
+            afterEvaluate { from(components["release"]) }
+        pom {
+            name.set("fzimra")
+            description.set("ZIMRA fiscalisation (FDMS) for Android: sign receipts on the device and sync them with ZIMRA.")
+            url.set("https://github.com/DonnC/zimra-fdms-android")
+            licenses {
+                license {
+                    name.set("MIT License")
+                    url.set("https://opensource.org/licenses/MIT")
+                }
+            }
+            developers {
+                developer {
+                    id.set("DonnC")
+                    name.set("Donald Chinhuru")
+                }
+            }
+            scm {
+                url.set("https://github.com/DonnC/zimra-fdms-android")
+                connection.set("scm:git:https://github.com/DonnC/zimra-fdms-android.git")
+            }
+        }
+        }
+    }
+    repositories {
+        // ./gradlew publish writes here; point it at a real repository when releasing.
+        maven {
+            name = "local"
+            url = uri(rootProject.layout.buildDirectory.dir("repository"))
+        }
+    }
 }
 
 dependencies {

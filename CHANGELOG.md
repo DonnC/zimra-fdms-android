@@ -5,10 +5,16 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.0] - unreleased
+
+The first release.
 
 ### Added
 
+- Maven publishing for `org.donnc:fzimra` and `org.donnc:fzimra-simulator`,
+  with sources and KDoc (`./gradlew publishAllPublicationsToLocalRepository`).
+- Continuous integration: build, lint and unit tests of every module on each
+  push and pull request.
 - The example app (`:example`): a Jetpack Compose point-of-sale app showing
   device registration, sales and refunds, receipts with QR and verification
   codes, fiscal days and their close, background sync, ZIMRA's traffic, and

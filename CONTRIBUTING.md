@@ -17,8 +17,9 @@ real receipts in an issue or pull request. Redact them.
 
 ## Development setup
 
-1. Install a JDK 17 or later and the Android SDK with platform 36. Android
-   Studio is optional.
+1. Install a JDK 17 or later and the Android SDK with platform 36 (and 37 for
+   the example app; the build downloads it if the SDK licence is accepted).
+   Android Studio is optional.
 2. Create `local.properties` in the project root:
 
    ```properties

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, lint and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Compiles the library, the simulator and the example app, runs lint on
+      # each and every JVM test, including the simulator's end-to-end tests.
+      - run: ./gradlew build --no-daemon
+
+      - name: Publish to a local repository
+        run: ./gradlew publishAllPublicationsToLocalRepository --no-daemon
+
+      - name: Keep test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            build/reports/
+            simulator/build/reports/
+            example/build/reports/
+          retention-days: 14

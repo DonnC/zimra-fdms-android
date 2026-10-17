@@ -1,5 +1,6 @@
 plugins {
     id("com.android.library")
+    `maven-publish`
 }
 
 group = "org.donnc"
@@ -18,6 +19,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = false
     }
@@ -26,6 +34,44 @@ android {
 kotlin {
     jvmToolchain(17)
     explicitApi()
+}
+
+publishing {
+    publications {
+        register<MavenPublication>("release") {
+            groupId = "org.donnc"
+            artifactId = "fzimra-simulator"
+            version = project.version.toString()
+            afterEvaluate { from(components["release"]) }
+        pom {
+            name.set("fzimra simulator")
+            description.set("A ZIMRA Fiscal Device Gateway simulator for developing and testing with fzimra.")
+            url.set("https://github.com/DonnC/zimra-fdms-android")
+            licenses {
+                license {
+                    name.set("MIT License")
+                    url.set("https://opensource.org/licenses/MIT")
+                }
+            }
+            developers {
+                developer {
+                    id.set("DonnC")
+                    name.set("Donald Chinhuru")
+                }
+            }
+            scm {
+                url.set("https://github.com/DonnC/zimra-fdms-android")
+                connection.set("scm:git:https://github.com/DonnC/zimra-fdms-android.git")
+            }
+        }
+        }
+    }
+    repositories {
+        maven {
+            name = "local"
+            url = uri(rootProject.layout.buildDirectory.dir("repository"))
+        }
+    }
 }
 
 dependencies {
