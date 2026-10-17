@@ -91,22 +91,24 @@ within the app, and re-reads the saved state for every receipt.
 
 #### Global numbering
 
-ZIMRA lets the global number start again at 1 only with the first receipt of
-a new fiscal day, so fzimra only ever restarts it there. Choose when with
-`numbering`:
+The global number counts every receipt since the device was activated and
+continues across fiscal days. ZIMRA allows it to start again at 1 only once it
+becomes very big, and only with the first receipt of a new fiscal day, so
+fzimra only ever restarts it there. Choose how with `numbering`:
 
 ```kotlin
-Fzimra.device(context, configuration, signer, numbering = GlobalNumbering(GlobalNumberReset.EVERY_FISCAL_DAY))
+Fzimra.device(context, configuration, signer, numbering = GlobalNumbering(GlobalNumberReset.NEVER))
 ```
 
 | `GlobalNumberReset` | The global number starts again at 1 |
 |---|---|
 | `NEAR_LIMIT` (default) | in the first new fiscal day after it passes 90% of `limit`. If `limit` is reached during a day, that day is closed and a new one started, so the device never stops issuing. |
-| `EVERY_FISCAL_DAY` | in every new fiscal day. |
 | `NEVER` | never. Once `limit` is reached, receipts are refused. |
 
-`limit` defaults to the largest number a receipt can carry. Set it lower if
-ZIMRA gives your device a lower limit.
+`limit` defaults to the largest number a receipt can carry, so by default the
+numbers simply continue. Set it lower to restart earlier. Restarting every
+fiscal day is not offered: ZIMRA defines the global number as the running
+total of receipts since activation.
 
 #### Credit and debit notes
 

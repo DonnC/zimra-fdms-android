@@ -50,26 +50,23 @@ class GlobalNumberingTest {
 
     @Test
     fun reachingTheLimitMidDayRollsTheDayOverAndRestarts() {
-        listOf(GlobalNumberReset.NEAR_LIMIT, GlobalNumberReset.EVERY_FISCAL_DAY).forEach { reset ->
-            stateStorage = InMemoryTextStorage()
-            val device = device(GlobalNumbering(reset, limit = 3))
-            repeat(3) { assertEquals(1, device.sell().fiscalDayNo) }
-            val next = device.sell()
-            assertEquals("$reset", 1 to 2, next.globalNo to next.fiscalDayNo)
-            val closing = device.state()!!.closingDays.single()
-            assertEquals(1 to FiscalDayStatus.CLOSE_REQUESTED, closing.fiscalDayNo to closing.status)
-        }
+        val device = device(GlobalNumbering(limit = 3))
+        repeat(3) { assertEquals(1, device.sell().fiscalDayNo) }
+        val next = device.sell()
+        assertEquals(1 to 2, next.globalNo to next.fiscalDayNo)
+        val closing = device.state()!!.closingDays.single()
+        assertEquals(1 to FiscalDayStatus.CLOSE_REQUESTED, closing.fiscalDayNo to closing.status)
     }
 
     @Test
-    fun everyFiscalDayRestartsEachNewDay() {
-        val device = device(GlobalNumbering(GlobalNumberReset.EVERY_FISCAL_DAY))
-        device.sell()
-        assertEquals(2, device.sell().globalNo)
-        device.closeDay()
+    fun numbersContinueAcrossFiscalDays() {
+        val device = device(GlobalNumbering())
+        repeat(3) {
+            device.sell()
+            device.closeDay()
+        }
         val next = device.sell()
-        assertEquals(1 to 2, next.globalNo to next.fiscalDayNo)
-        assertEquals(2, device.sell().globalNo)
+        assertEquals(4 to 4, next.globalNo to next.fiscalDayNo)
     }
 
     @Test
@@ -114,8 +111,7 @@ class GlobalNumberingTest {
     fun restartsAtFollowsThePolicy() {
         assertFalse(GlobalNumbering(limit = 100).restartsAt(90))
         assertTrue(GlobalNumbering(limit = 100).restartsAt(91))
-        assertTrue(GlobalNumbering(GlobalNumberReset.EVERY_FISCAL_DAY).restartsAt(1))
-        assertFalse(GlobalNumbering(GlobalNumberReset.EVERY_FISCAL_DAY).restartsAt(0))
+        assertFalse("the default limit keeps numbers running", GlobalNumbering().restartsAt(1_900_000_000))
         assertFalse(GlobalNumbering(GlobalNumberReset.NEVER, 100).restartsAt(100))
         assertTrue("no overflow at the largest limit", GlobalNumbering().restartsAt(Int.MAX_VALUE))
     }

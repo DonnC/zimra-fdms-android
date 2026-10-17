@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Global numbering (`GlobalNumbering`, `GlobalNumberReset`): choose when the
-  global number starts again at 1: near its limit (the default), every new
-  fiscal day, or never. A restart only happens with the first receipt of a
+  global number starts again at 1: near its limit (the default) or never.
+  Numbers continue across fiscal days; no daily restart is offered. A restart only happens with the first receipt of a
   new fiscal day; reaching the limit during a day starts a new day, except
   with `NEVER`, which refuses further receipts.
 - Credit and debit notes are checked against the original receipt: currency,
