@@ -34,4 +34,6 @@ kotlin {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // Reads the JSON test vectors, keeping numbers exact; not shipped with the library.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 }
