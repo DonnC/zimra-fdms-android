@@ -88,6 +88,15 @@ public class KeystoreSigner private constructor(
             KeyFactory.getInstance(privateKey.algorithm, Keystore.PROVIDER).getKeySpec(privateKey, KeyInfo::class.java),
         )
 
+    /**
+     * When the installed ZIMRA certificate expires, or `null` before one is
+     * installed. Renew it before then (ZIMRA suggests a month ahead): make a new
+     * certificate request with `DeviceCsr`, send it with
+     * `FdmsClient.issueCertificate` and install the answer.
+     */
+    public val zimraCertificateExpiry: java.time.Instant?
+        get() = zimraChain()?.first()?.notAfter?.toInstant()
+
     /** Whether a ZIMRA device certificate has been installed for the key. */
     public val hasZimraCertificate: Boolean
         get() = zimraChain() != null

@@ -15,6 +15,8 @@ import org.donnc.fzimra.core.SignatureStrings
 import org.donnc.fzimra.core.TaxDefinition
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -69,6 +71,18 @@ class FzimraDeviceTest {
         val again = Fzimra.device(context, configuration, KeystoreSigner.load(alias)!!)
         assertEquals(2, (again.issue(sale()) as IssueResult.Issued).receipt.globalNo)
         assertEquals(listOf(1, 2), again.pendingReceipts().map { it.globalNo })
+    }
+
+    @Test
+    fun deviceDataIsDeletedOnlyOnceSentOrExplicitlyDiscarded() {
+        val signer = KeystoreSigner.getOrCreate(alias, requireHardware = false)
+        Fzimra.device(context, configuration, signer, backgroundSync = false).issue(sale())
+        assertThrows(IllegalStateException::class.java) { Fzimra.deleteDeviceData(context, deviceId) }
+        Fzimra.deleteDeviceData(context, deviceId, discardUnsentReceipts = true)
+        assertFalse(File(context.noBackupFilesDir, "org.donnc.fzimra/state/fzimra.state.$deviceId").exists())
+        assertNull(KeystoreSealer.load(Fzimra.sealAlias(deviceId)))
+        val fresh = Fzimra.device(context, configuration, signer, backgroundSync = false)
+        assertNull("a new start", fresh.state())
     }
 
     @Test

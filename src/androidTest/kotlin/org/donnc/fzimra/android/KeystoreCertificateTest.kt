@@ -51,6 +51,7 @@ class KeystoreCertificateTest {
         val signer = KeystoreSigner.getOrCreate(alias, requireHardware = false)
         val keys = signer.keyManager()
         assertFalse(signer.hasZimraCertificate)
+        assertNull(signer.zimraCertificateExpiry)
         assertNull("no client certificate before registration", keys.chooseClientAlias(arrayOf("EC"), null, null))
 
         val pem = issue(signer.publicKey, DeviceCsr.commonName(identity.serialNo, identity.deviceId))
@@ -58,6 +59,7 @@ class KeystoreCertificateTest {
 
         assertTrue(signer.hasZimraCertificate)
         assertTrue(KeystoreSigner.load(alias)!!.hasZimraCertificate)
+        assertTrue(signer.zimraCertificateExpiry!!.isAfter(java.time.Instant.now()))
         assertEquals("the key manager made earlier sees it", alias, keys.chooseClientAlias(arrayOf("EC"), null, null))
         assertArrayEquals(signer.publicKey.encoded, keys.getCertificateChain(alias)!!.first().publicKey.encoded)
         assertEquals(signer.publicKey.algorithm, keys.getPrivateKey(alias)!!.algorithm)

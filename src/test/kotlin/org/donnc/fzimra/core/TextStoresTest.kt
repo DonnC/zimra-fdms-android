@@ -77,6 +77,23 @@ class TextRecordStoreRetentionTest {
     }
 
     @Test
+    fun aDevicesDataCanBeDeleted() {
+        store.save(sampleRecord(1, ReceiptSyncStatus.PENDING, now))
+        store.save(sampleRecord(2, ReceiptSyncStatus.PENDING, now))
+        store.save(sampleRecord(1, ReceiptSyncStatus.PENDING, now, deviceId = 7002))
+        store.deleteAll(7001)
+        assertEquals(emptyList<ReceiptRecord>(), store.list(7001))
+        assertEquals(1, store.list(7002).size)
+
+        val states = TextStateStore(storage)
+        states.write(sampleSnapshot())
+        states.write(sampleSnapshot(deviceId = 7002))
+        states.delete(7001)
+        assertNull(states.read(7001))
+        assertNotNull(states.read(7002))
+    }
+
+    @Test
     fun pruningRunsAtMostOnceAnHour() {
         store.save(sampleRecord(1, ReceiptSyncStatus.SUBMITTED, now)) // prunes now
         now = now.plus(Duration.ofMinutes(10))

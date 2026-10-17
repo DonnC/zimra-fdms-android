@@ -89,6 +89,28 @@ public object Fzimra {
         clock = clock,
     )
 
+    /**
+     * Removes what fzimra keeps for [deviceId] in its own storage: the device
+     * state, the receipt records and the sealing key. Use it when the device is
+     * taken out of service. It cannot be undone, and the device key (the
+     * `KeystoreSigner`) is left for you to delete.
+     *
+     * @param discardUnsentReceipts delete even if receipts have not reached
+     *   ZIMRA yet. They are then lost: ZIMRA will never receive them.
+     * @throws IllegalStateException if receipts are unsent and
+     *   [discardUnsentReceipts] is `false`.
+     */
+    public fun deleteDeviceData(context: Context, deviceId: Int, discardUnsentReceipts: Boolean = false) {
+        val app = context.applicationContext
+        val unsent = DefaultStores.unsentReceipts(app, deviceId)
+        check(unsent == 0 || discardUnsentReceipts) {
+            "device $deviceId has $unsent receipt(s) ZIMRA has not received; sync them first"
+        }
+        FzimraBackground.cancel(app, deviceId)
+        DefaultStores.delete(app, deviceId)
+        KeystoreSealer.delete(sealAlias(deviceId))
+    }
+
     /** The Keystore alias of the default sealing key for [deviceId]. */
     public fun sealAlias(deviceId: Int): String = "fzimra.seal.$deviceId"
 }

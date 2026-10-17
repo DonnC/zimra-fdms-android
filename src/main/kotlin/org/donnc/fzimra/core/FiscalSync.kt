@@ -50,6 +50,7 @@ public data class ClosedDay(
  * @property closedDays fiscal days ZIMRA confirmed as closed.
  * @property problems what needs attention, when [outcome] is [SyncOutcome.BLOCKED].
  * @property pendingReceipts receipts still waiting to be sent.
+ * @property oldestPendingDate when the oldest of them was issued.
  * @property configuration ZIMRA's configuration, when it was fetched in this run.
  * @property error the failure, when [outcome] is [SyncOutcome.OFFLINE].
  */
@@ -60,6 +61,7 @@ public data class SyncReport(
     val closedDays: List<ClosedDay> = emptyList(),
     val problems: List<String> = emptyList(),
     val pendingReceipts: Int = 0,
+    val oldestPendingDate: java.time.LocalDateTime? = null,
     val configuration: ZimraConfiguration? = null,
     val error: Exception? = null,
 )
@@ -162,6 +164,7 @@ public class FiscalSync(
             closedDays = closed.toList(),
             problems = problems,
             pendingReceipts = runCatching { device.currentSnapshot()?.outbox?.size ?: 0 }.getOrDefault(0),
+            oldestPendingDate = runCatching { device.oldestUnsentReceiptDate() }.getOrNull(),
             configuration = configuration,
             error = error,
         )

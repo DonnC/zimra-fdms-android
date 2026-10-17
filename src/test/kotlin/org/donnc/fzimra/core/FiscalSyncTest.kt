@@ -96,14 +96,19 @@ class FiscalSyncTest {
         val device = device()
         repeat(2) { device.sell() }
         zimra.offlineFor = 1
+        val first = device.pendingReceipts().first()
         val offline = sync(device)
         assertEquals(SyncOutcome.OFFLINE, offline.outcome)
         assertTrue(offline.error is FdmsNetworkException)
         assertEquals(2, offline.pendingReceipts)
+        assertEquals(first.date, offline.oldestPendingDate)
+        assertEquals(first.date, device.oldestUnsentReceiptDate())
 
         val report = sync(device)
         assertEquals(SyncOutcome.COMPLETE, report.outcome)
         assertEquals(2, zimra.days.single().receipts.size)
+        assertEquals(null, report.oldestPendingDate)
+        assertEquals(null, device.oldestUnsentReceiptDate())
     }
 
     @Test

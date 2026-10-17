@@ -301,10 +301,25 @@ signer.installCertificate(issued.certificatePem, identity)
 
 `installCertificate` checks that the certificate is for the device key and
 this device ID, and valid, then stores it with the key in the Keystore. The
-same client then works for every other request. Renew the certificate before
-it expires with `issueCertificate` and install the new one the same way.
-Installing replaces the key's attestation chain, so read
-`signer.certificateChain` first if your server needs it.
+same client then works for every other request. Installing replaces the key's
+attestation chain, so read `signer.certificateChain` first if your server
+needs it.
+
+ZIMRA refuses every request once the certificate expires, which would stop
+receipts reaching ZIMRA. Renew it well before (ZIMRA suggests a month ahead);
+`signer.zimraCertificateExpiry` says when, without asking ZIMRA:
+
+```kotlin
+val renewed = zimra.issueCertificate(DeviceCsr.create(signer, identity.serialNo, identity.deviceId))
+signer.installCertificate(renewed.certificatePem, identity)
+```
+
+#### Taking a device out of service
+
+`Fzimra.deleteDeviceData(context, deviceId)` removes the device state,
+records and sealing key fzimra keeps. It refuses while receipts have not
+reached ZIMRA, unless you pass `discardUnsentReceipts = true`; those receipts
+are then lost.
 
 #### Working with ZIMRA
 
@@ -372,6 +387,12 @@ Along the way a run:
   ZIMRA's signing certificate, and records the result;
 - notices a day closed in ZIMRA's portal and starts a new one with the next
   sale.
+
+`report.oldestPendingDate`, or `device.oldestUnsentReceiptDate()`, says when
+the oldest receipt still waiting for ZIMRA was issued. ZIMRA's specification
+sets no deadline for sending, other than before the fiscal day is closed, so
+fzimra sets none either; use it to warn when the device has been unable to
+reach ZIMRA for longer than you accept.
 
 #### Background sync
 

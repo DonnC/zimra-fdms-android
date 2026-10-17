@@ -150,6 +150,13 @@ public class FiscalDevice(
      */
     public fun pendingReceipts(): List<IssuedReceipt> = read()?.outbox.orEmpty()
 
+    /**
+     * When the oldest receipt ZIMRA has not yet accepted was issued, or `null`
+     * when every receipt has been accepted. Use it to warn when the device has
+     * been unable to reach ZIMRA for long.
+     */
+    public fun oldestUnsentReceiptDate(): LocalDateTime? = read()?.outbox?.firstOrNull()?.date
+
     /** The stored snapshot, checked; `null` if there is none. */
     private fun read(): FiscalSnapshot? {
         val snapshot = stateStore.read(deviceId) ?: return null

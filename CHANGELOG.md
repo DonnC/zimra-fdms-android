@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `FiscalDevice.oldestUnsentReceiptDate()` and `SyncReport.oldestPendingDate`,
+  to warn when receipts have waited long for ZIMRA.
+- `KeystoreSigner.zimraCertificateExpiry`, to renew the certificate in time.
+- `Fzimra.deleteDeviceData`, for taking a device out of service; it refuses
+  while receipts are unsent unless told to discard them.
 - Background sync on Android (`FzimraBackground`, `FzimraSyncService`):
   `JobScheduler` runs that need a network, survive restarts and back off while
   ZIMRA cannot be reached; a run follows every sale and close request on a

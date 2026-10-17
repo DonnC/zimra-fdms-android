@@ -29,6 +29,9 @@ internal class TextStateStore(private val storage: TextStorage) : FiscalStateSto
         storage.write(mapOf(key(snapshot.state.deviceId) to StoreCodec.encodeSnapshot(snapshot)))
     }
 
+    /** Removes [deviceId]'s state. */
+    fun delete(deviceId: Int) = storage.write(mapOf(key(deviceId) to null))
+
     private fun key(deviceId: Int) = "fzimra.state.$deviceId"
 }
 
@@ -64,6 +67,13 @@ internal class TextRecordStore(
         val prefix = "$PREFIX$deviceId."
         return storage.keys().filter { it.startsWith(prefix) }.sorted()
             .mapNotNull { storage.read(it)?.let(StoreCodec::decodeRecord) }
+    }
+
+    /** Removes every record of [deviceId]. */
+    fun deleteAll(deviceId: Int) {
+        val prefix = "$PREFIX$deviceId."
+        val keys = storage.keys().filter { it.startsWith(prefix) }
+        if (keys.isNotEmpty()) storage.write(keys.associateWith { null })
     }
 
     private fun expiredKeys(current: Instant): List<String> {

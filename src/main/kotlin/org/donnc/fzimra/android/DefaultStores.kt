@@ -35,6 +35,15 @@ internal object DefaultStores {
      */
     fun records(context: Context, retention: Duration = TextRecordStore.DEFAULT_RETENTION): ReceiptRecordStore =
         TextRecordStore(FileStorage(File(context.noBackupFilesDir, RECORDS_DIRECTORY)), retention)
+
+    /** Unsent receipts kept for [deviceId], read without the seal check. */
+    fun unsentReceipts(context: Context, deviceId: Int): Int =
+        TextStateStore(FileStorage(File(context.noBackupFilesDir, STATE_DIRECTORY))).read(deviceId)?.outbox?.size ?: 0
+
+    fun delete(context: Context, deviceId: Int) {
+        TextStateStore(FileStorage(File(context.noBackupFilesDir, STATE_DIRECTORY))).delete(deviceId)
+        TextRecordStore(FileStorage(File(context.noBackupFilesDir, RECORDS_DIRECTORY))).deleteAll(deviceId)
+    }
 }
 
 /**
