@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Tamper evidence for stored data:
+  - `Sealer`, and `KeystoreSealer`: an HMAC-SHA256 key in Android Keystore
+    (StrongBox when available) that seals every stored device state and
+    receipt record (`FiscalSnapshot.seal`, `ReceiptRecord.seal`); seals cover
+    the data, not its storage, so app-provided stores are protected too;
+  - every read checks the seal; the first read of each `FiscalDevice` also
+    checks every unsent receipt's hash and signature, the links between
+    consecutive receipts, and the device state's agreement with them;
+  - data that fails is never used: `FiscalIntegrityException` lists what was
+    found; tampered records are not used to check credit and debit notes;
+  - `Fzimra.device` creates the sealing key (`Fzimra.sealAlias`), held at
+    least as securely as the device key, unless the app passes its own.
+- Tests: edited, unsealed and foreign-sealed state, a different sealing key,
+  seals of one kind passing for another, edited receipts under a valid seal,
+  wrong signing keys, missing receipts and days, state that disagrees with its
+  receipts, and edited records; on-device sealing key and tamper tests.
 - Global numbering (`GlobalNumbering`, `GlobalNumberReset`): choose when the
   global number starts again at 1: near its limit (the default) or every new
   fiscal day. A restart only happens with the first receipt of a new fiscal
@@ -105,5 +121,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `FiscalDevice` takes a `sealer`.
 - `ReceiptRecords.find` takes the fiscal day number as well as the global
   number, since global numbers may repeat across fiscal days.

@@ -12,10 +12,11 @@ class GlobalNumberingTest {
     private var now = start
     private val clock = FiscalClock { now }
     private var stateStorage = InMemoryTextStorage()
+    private val signer = SoftwareSigner.ecP256()
     private val configuration = DeviceConfiguration(7001, "https://fdmstest.zimra.co.zw", TAXES, isVatPayer = true, dayMaxHours = 24)
 
     private fun device(numbering: GlobalNumbering) = FiscalDevice(
-        configuration, SoftwareSigner.ecP256(), TextStateStore(stateStorage), TextRecordStore(InMemoryTextStorage()), clock,
+        configuration, signer, TextStateStore(stateStorage), TextRecordStore(InMemoryTextStorage()), SoftwareSealer(), clock,
         numbering = numbering,
     )
 
@@ -112,7 +113,7 @@ class GlobalNumberingTest {
     @Test
     fun theLargestGlobalNumberMidDayIsFollowedByANewDayAtOne() {
         val open = FiscalDayState(8, start, FiscalDayStatus.OPENED, 3, "last=", emptyList())
-        TextStateStore(stateStorage).write(FiscalSnapshot(1, DeviceState(7001, Int.MAX_VALUE - 1, start, 8, open), emptyList()))
+        TextStateStore(stateStorage).write(sealed(FiscalSnapshot(1, DeviceState(7001, Int.MAX_VALUE - 1, start, 8, open), emptyList())))
         val device = device(GlobalNumbering())
         val last = device.sell()
         assertEquals(Int.MAX_VALUE to 8, last.globalNo to last.fiscalDayNo)
@@ -124,7 +125,7 @@ class GlobalNumberingTest {
     @Test
     fun anEmptyUnannouncedDayRestartsWithoutAskingZimraToCloseIt() {
         val idle = FiscalDayState(5, start.minusHours(30), FiscalDayStatus.OPEN_PENDING, 0, null, emptyList())
-        TextStateStore(stateStorage).write(FiscalSnapshot(1, DeviceState(7001, 3, null, 5, idle), emptyList()))
+        TextStateStore(stateStorage).write(sealed(FiscalSnapshot(1, DeviceState(7001, 3, null, 5, idle), emptyList())))
         val receipt = device(GlobalNumbering(limit = 3)).sell()
         assertEquals(1 to 5, receipt.globalNo to receipt.fiscalDayNo)
         assertTrue(device(GlobalNumbering()).state()!!.closingDays.isEmpty())

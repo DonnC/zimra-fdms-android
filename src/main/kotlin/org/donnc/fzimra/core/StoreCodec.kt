@@ -8,6 +8,10 @@ import java.time.LocalDateTime
  * Converts fiscal state and receipt records to and from JSON for fzimra's own
  * stores. Every stored document carries a `format` number so later versions
  * can read what earlier ones wrote.
+ *
+ * The encoding is also what seals are computed over (see [Seals]), so it must
+ * stay byte-for-byte stable within a format: a change to it needs a new
+ * format, and seals made under the old one must still be checked with it.
  */
 internal object StoreCodec {
     const val FORMAT = 1
@@ -18,11 +22,12 @@ internal object StoreCodec {
             "version" to num(snapshot.version),
             "state" to state(snapshot.state),
             "outbox" to JsonValue.Arr(snapshot.outbox.map(::issued)),
+            "seal" to opt(snapshot.seal),
         ),
     )
 
     fun decodeSnapshot(text: String): FiscalSnapshot = decode(text) {
-        FiscalSnapshot(long("version"), state(obj("state")), list("outbox").map { issued(it.asObj()) })
+        FiscalSnapshot(long("version"), state(obj("state")), list("outbox").map { issued(it.asObj()) }, optText("seal"))
     }
 
     fun encodeRecord(record: ReceiptRecord): String = Json.write(
@@ -36,6 +41,7 @@ internal object StoreCodec {
                 record.validations.map { obj("code" to str(it.code), "colour" to opt(it.colour), "message" to opt(it.message)) },
             ),
             "updatedAt" to str(record.updatedAt.toString()),
+            "seal" to opt(record.seal),
         ),
     )
 
@@ -50,6 +56,7 @@ internal object StoreCodec {
                 ZimraValidation(v.text("code"), v.optText("colour"), v.optText("message"))
             },
             updatedAt = Instant.parse(text("updatedAt")),
+            seal = optText("seal"),
         )
     }
 

@@ -302,6 +302,45 @@ Fiscal data is never backed up. Restoring an older copy of the device state
 would make the device reuse receipt numbers ZIMRA has already received. If
 you implement `FiscalStateStore` yourself, keep its data out of backups too.
 
+#### Tamper evidence
+
+Everything fzimra stores is sealed: each device state and each receipt record
+carries a `seal`, an HMAC-SHA256 tag made with a key in Android Keystore
+(`KeystoreSealer`, StrongBox when available). The app cannot read that key, so
+it cannot forge a seal over edited data. Seals are computed over the data
+itself, not its storage, so they protect your own stores as well as fzimra's.
+Keep the `seal` field as given when you store a snapshot or record.
+
+On every read, fzimra checks the seal. The first time each `FiscalDevice`
+instance reads the state, it also checks every receipt not yet accepted by
+ZIMRA: its hash and its signature by the device key, the counters, global
+numbers, hash links and dates between consecutive receipts, and that the
+device state agrees with them. Data that fails is never used:
+
+```kotlin
+try {
+    device.issue(request)
+} catch (e: FiscalIntegrityException) {
+    e.problems // what was found; nothing was issued
+}
+```
+
+Reading records that fail (`device.records`) throws the same exception. A
+credit note whose original can only be found in a tampered record is still
+issued, with a warning, as if the original were not recorded.
+
+`Fzimra.device` creates the sealing key under `Fzimra.sealAlias(deviceId)`,
+held at least as securely as the device key. Keep it as long as the device key:
+without it, stored state can no longer be checked and fzimra refuses it. Both
+keys, and fzimra's own stores, go when the app is uninstalled or its data is
+cleared. To seal another way, pass your own `Sealer`.
+
+What a seal cannot show is a **rollback**: an older copy of the state, sealed
+by fzimra at the time, restored in place of the current one. A phone has no
+reliable way to tell. This is why fiscal data is kept out of backups, and why
+fzimra will compare the device state with ZIMRA's own record of the device's
+last fiscal day and receipt before it opens a day with ZIMRA.
+
 ### Signing primitives
 
 All amounts are `java.math.BigDecimal`. Amounts that are signed must be whole

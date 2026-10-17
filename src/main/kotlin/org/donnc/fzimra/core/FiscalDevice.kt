@@ -59,9 +59,15 @@ public sealed class IssueResult {
  * state is re-read for every receipt, so two instances for the same device
  * cannot issue the same number.
  *
+ * Stored state and records are sealed with [sealer]. Every read checks the
+ * seal, and the first read of each instance also checks every unsent receipt
+ * against the device key and against the receipts around it. Data that fails
+ * is never used: reads throw [FiscalIntegrityException].
+ *
  * @param signer the device key.
  * @param stateStore where the device state and unsent receipts are kept.
  * @param recordStore where receipt records are kept.
+ * @param sealer seals stored state and records; its key must stay with this device.
  * @param clock the time receipts are dated with.
  * @param dayCloseMargin how long before ZIMRA's maximum day length a new
  *   fiscal day is started.
@@ -72,21 +78,68 @@ public class FiscalDevice(
     private val signer: Signer,
     private val stateStore: FiscalStateStore,
     private val recordStore: ReceiptRecordStore,
+    sealer: Sealer,
     private val clock: FiscalClock = ZimbabweClock(),
     private val dayCloseMargin: Duration = Duration.ofHours(1),
     public val numbering: GlobalNumbering = GlobalNumbering(),
 ) {
     private val deviceId: Int get() = configuration.deviceId
     private val lock: Any get() = LOCKS.computeIfAbsent(deviceId) { Any() }
+    private val seals = Seals(sealer)
 
-    /** Records of issued receipts, read-only. */
-    public val records: ReceiptRecords get() = recordStore
+    @Volatile
+    private var receiptsChecked = false
 
-    /** The device's current state, or `null` before its first receipt. */
-    public fun state(): DeviceState? = stateStore.read(deviceId)?.state
+    /**
+     * Records of issued receipts, read-only.
+     *
+     * @throws FiscalIntegrityException from a read that meets a record whose
+     *   seal does not match.
+     */
+    public val records: ReceiptRecords = object : ReceiptRecords {
+        override fun find(deviceId: Int, fiscalDayNo: Int, globalNo: Int): ReceiptRecord? =
+            recordStore.find(deviceId, fiscalDayNo, globalNo)?.also(::requireSealed)
 
-    /** Receipts issued but not yet accepted by ZIMRA, in issuing order. */
-    public fun pendingReceipts(): List<IssuedReceipt> = stateStore.read(deviceId)?.outbox.orEmpty()
+        override fun list(deviceId: Int): List<ReceiptRecord> = recordStore.list(deviceId).onEach(::requireSealed)
+    }
+
+    /**
+     * The device's current state, or `null` before its first receipt.
+     *
+     * @throws FiscalIntegrityException if the stored state fails its checks.
+     */
+    public fun state(): DeviceState? = read()?.state
+
+    /**
+     * Receipts issued but not yet accepted by ZIMRA, in issuing order.
+     *
+     * @throws FiscalIntegrityException if the stored state fails its checks.
+     */
+    public fun pendingReceipts(): List<IssuedReceipt> = read()?.outbox.orEmpty()
+
+    /** The stored snapshot, checked; `null` if there is none. */
+    private fun read(): FiscalSnapshot? {
+        val snapshot = stateStore.read(deviceId) ?: return null
+        if (!seals.isSealed(snapshot)) {
+            throw FiscalIntegrityException(listOf("the device state was changed outside fzimra, or its seal is missing"))
+        }
+        if (!receiptsChecked) {
+            val problems = IntegrityCheck.problems(snapshot, deviceId, signer.publicKey)
+            if (problems.isNotEmpty()) throw FiscalIntegrityException(problems)
+            receiptsChecked = true
+        }
+        return snapshot
+    }
+
+    private fun write(snapshot: FiscalSnapshot) = stateStore.write(seals.seal(snapshot))
+
+    private fun requireSealed(record: ReceiptRecord) {
+        if (!seals.isSealed(record)) {
+            throw FiscalIntegrityException(
+                listOf("the record of receipt ${record.receipt.fiscalDayNo}/${record.receipt.globalNo} was changed outside fzimra"),
+            )
+        }
+    }
 
     /**
      * Continues numbering after another system used this ZIMRA device. Only
@@ -103,7 +156,7 @@ public class FiscalDevice(
             if (stateStore.read(deviceId) != null) {
                 throw IllegalStateException("device $deviceId already has fiscal state; numbering cannot be reset")
             }
-            stateStore.write(FiscalSnapshot(1, DeviceState(deviceId, lastGlobalNo, null, lastFiscalDayNo, null), emptyList()))
+            write(FiscalSnapshot(1, DeviceState(deviceId, lastGlobalNo, null, lastFiscalDayNo, null), emptyList()))
         }
     }
 
@@ -114,11 +167,11 @@ public class FiscalDevice(
      * @return `true` if a day was open and is now marked for closing.
      */
     public fun requestDayClose(): Boolean = synchronized(lock) {
-        val snapshot = stateStore.read(deviceId) ?: return false
+        val snapshot = read() ?: return false
         val day = snapshot.state.currentDay ?: return false
         if (!day.status.acceptsReceipts()) return false
         if (day.isUnannouncedAndEmpty()) return false // nothing for ZIMRA to close
-        stateStore.write(
+        write(
             snapshot.copy(
                 version = snapshot.version + 1,
                 state = snapshot.state.copy(
@@ -139,10 +192,12 @@ public class FiscalDevice(
      * @throws FiscalSigningException if the device key cannot sign.
      * @throws FiscalStoreException if the device state cannot be saved; the
      *   receipt is then not issued and its number is not used.
+     * @throws FiscalIntegrityException if the stored state fails its checks;
+     *   nothing is issued.
      */
     public fun issue(request: ReceiptRequest): IssueResult = synchronized(lock) {
         val now = clock.now()
-        val snapshot = stateStore.read(deviceId) ?: FiscalSnapshot(0, DeviceState(deviceId, 0, null, 0, null), emptyList())
+        val snapshot = read() ?: FiscalSnapshot(0, DeviceState(deviceId, 0, null, 0, null), emptyList())
         var state = snapshot.state
 
         val prepared = when (val result = ReceiptBuilder.prepare(request, configuration.receiptContext, now.toLocalDate())) {
@@ -152,7 +207,18 @@ public class FiscalDevice(
 
         val warnings = mutableListOf<ReceiptProblem>()
         if (prepared.original != null) {
-            val original = originalDetails(prepared.original, request.originalDetails)
+            val history = try {
+                records.list(deviceId)
+            } catch (e: FiscalIntegrityException) {
+                warnings += ReceiptProblem(
+                    null, "original",
+                    "this device's receipt records failed their integrity checks and were not used: ${e.message}",
+                )
+                emptyList()
+            } catch (e: RuntimeException) {
+                emptyList()
+            }
+            val original = originalDetails(prepared.original, request.originalDetails, history)
             if (original == null) {
                 warnings += ReceiptProblem(
                     null, "original",
@@ -194,7 +260,7 @@ public class FiscalDevice(
             lastReceiptHash = signature.hash,
             counters = FiscalCounters.merge(day.counters, FiscalCounters.of(prepared)),
         )
-        stateStore.write(
+        write(
             FiscalSnapshot(
                 version = snapshot.version + 1,
                 state = state.copy(lastGlobalNo = globalNo, lastReceiptDate = date, currentDay = nextDay),
@@ -205,7 +271,7 @@ public class FiscalDevice(
         // The outbox is what fzimra relies on to submit the receipt; the record is
         // history. A failed record write must not undo an issued receipt.
         try {
-            recordStore.save(ReceiptRecord(issued, ReceiptSyncStatus.PENDING, updatedAt = Instant.now()))
+            recordStore.save(seals.seal(ReceiptRecord(issued, ReceiptSyncStatus.PENDING, updatedAt = Instant.now())))
         } catch (e: RuntimeException) {
             // Kept in the outbox; the record is written again when ZIMRA's answer arrives.
         }
@@ -216,12 +282,11 @@ public class FiscalDevice(
      * Details of [original]: from this device's records when it has them,
      * counting earlier credit and debit notes against it; otherwise [given].
      */
-    private fun originalDetails(original: OriginalReceipt, given: OriginalReceiptDetails?): OriginalReceiptDetails? {
-        val records = try {
-            recordStore.list(deviceId)
-        } catch (e: RuntimeException) {
-            emptyList()
-        }
+    private fun originalDetails(
+        original: OriginalReceipt,
+        given: OriginalReceiptDetails?,
+        records: List<ReceiptRecord>,
+    ): OriginalReceiptDetails? {
         val record = records.firstOrNull { refersTo(original, it) } ?: return given
         val notes = records.filter { other ->
             val reference = other.receipt.receipt.original

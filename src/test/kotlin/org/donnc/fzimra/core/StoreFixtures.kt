@@ -83,6 +83,7 @@ internal fun sampleSnapshot(version: Long = 3, deviceId: Int = 7001) = FiscalSna
         ),
     ),
     outbox = listOf(sampleReceipt(1, deviceId), sampleReceipt(2, deviceId, ReceiptType.CREDIT_NOTE)),
+    seal = "c2VhbC1vZi1zbmFwc2hvdA==",
 )
 
 internal fun sampleRecord(
@@ -97,4 +98,5 @@ internal fun sampleRecord(
     serverDate = if (status == ReceiptSyncStatus.SUBMITTED) LocalDateTime.of(2026, 10, 17, 9, 0, 30) else null,
     validations = if (status == ReceiptSyncStatus.SUBMITTED) listOf(ZimraValidation("RCPT031", "Yellow", null)) else emptyList(),
     updatedAt = updatedAt,
+    seal = "c2VhbC1vZi1yZWNvcmQ=",
 )

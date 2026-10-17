@@ -71,27 +71,19 @@ public class KeystoreSigner private constructor(
      * lets a server confirm that the key was generated in secure hardware.
      */
     public val certificateChain: List<X509Certificate>
-        get() = keyStore().getCertificateChain(alias)?.map { it as X509Certificate }.orEmpty()
+        get() = Keystore.keyStore().getCertificateChain(alias)?.map { it as X509Certificate }.orEmpty()
 
     /** Where the key is held. */
     public val securityLevel: KeySecurityLevel
-        get() {
-            val info = KeyFactory.getInstance(privateKey.algorithm, PROVIDER).getKeySpec(privateKey, KeyInfo::class.java)
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                securityLevelOf(info)
-            } else {
-                @Suppress("DEPRECATION")
-                if (info.isInsideSecureHardware) KeySecurityLevel.TRUSTED_ENVIRONMENT else KeySecurityLevel.SOFTWARE
-            }
-        }
+        get() = Keystore.securityLevel(
+            KeyFactory.getInstance(privateKey.algorithm, Keystore.PROVIDER).getKeySpec(privateKey, KeyInfo::class.java),
+        )
 
     override fun toString(): String = "KeystoreSigner(alias=$alias)"
 
     public companion object {
-        private const val PROVIDER = "AndroidKeyStore"
-
         /** Whether a key exists under [alias]. */
-        public fun exists(alias: String): Boolean = keyStore().containsAlias(alias)
+        public fun exists(alias: String): Boolean = Keystore.keyStore().containsAlias(alias)
 
         /**
          * The device key under [alias], creating it if it does not exist.
@@ -110,7 +102,7 @@ public class KeystoreSigner private constructor(
 
         /** The existing device key under [alias], or `null`. */
         public fun load(alias: String): KeystoreSigner? {
-            val entry = keyStore().getEntry(alias, null) as? KeyStore.PrivateKeyEntry ?: return null
+            val entry = Keystore.keyStore().getEntry(alias, null) as? KeyStore.PrivateKeyEntry ?: return null
             return KeystoreSigner(alias, entry.privateKey, entry.certificate.publicKey)
         }
 
@@ -143,7 +135,7 @@ public class KeystoreSigner private constructor(
          * registered with ZIMRA again with a new key.
          */
         public fun delete(alias: String) {
-            keyStore().deleteEntry(alias)
+            Keystore.keyStore().deleteEntry(alias)
         }
 
         private fun generate(alias: String, challenge: ByteArray?) {
@@ -165,7 +157,7 @@ public class KeystoreSigner private constructor(
         }
 
         private fun generateKey(spec: KeyGenParameterSpec) {
-            KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, PROVIDER).run {
+            KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, Keystore.PROVIDER).run {
                 initialize(spec)
                 generateKeyPair()
             }
@@ -178,24 +170,7 @@ public class KeystoreSigner private constructor(
                 .setDigests(KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_NONE)
                 .setUserAuthenticationRequired(false)
                 .apply { if (challenge != null) setAttestationChallenge(challenge) }
-                .apply { if (strongBox && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) strongBoxBacked(this) }
+                .apply { if (strongBox) Keystore.strongBoxBacked(this) }
                 .build()
-
-        @SuppressLint("UseRequiresApi") // private: every caller checks Build.VERSION first
-        @TargetApi(Build.VERSION_CODES.P)
-        private fun strongBoxBacked(builder: KeyGenParameterSpec.Builder) {
-            builder.setIsStrongBoxBacked(true)
-        }
-
-        @SuppressLint("UseRequiresApi") // private: every caller checks Build.VERSION first
-        @TargetApi(Build.VERSION_CODES.S)
-        private fun securityLevelOf(info: KeyInfo): KeySecurityLevel = when (info.securityLevel) {
-            KeyProperties.SECURITY_LEVEL_STRONGBOX -> KeySecurityLevel.STRONGBOX
-            KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> KeySecurityLevel.TRUSTED_ENVIRONMENT
-            KeyProperties.SECURITY_LEVEL_SOFTWARE -> KeySecurityLevel.SOFTWARE
-            else -> KeySecurityLevel.UNKNOWN
-        }
-
-        private fun keyStore(): KeyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
     }
 }

@@ -30,7 +30,7 @@ class FiscalDeviceTest {
     private val configuration = DeviceConfiguration(7001, "https://fdmstest.zimra.co.zw", TAXES, isVatPayer = true, dayMaxHours = 24)
 
     private fun device(config: DeviceConfiguration = configuration, withSigner: Signer = signer) =
-        FiscalDevice(config, withSigner, TextStateStore(stateStorage), TextRecordStore(recordStorage), clock)
+        FiscalDevice(config, withSigner, TextStateStore(stateStorage), TextRecordStore(recordStorage), SoftwareSealer(), clock)
 
     private fun sale(price: String = "10.00") = invoice(listOf(bread(1, d(price))))
 
@@ -195,7 +195,7 @@ class FiscalDeviceTest {
     @Test
     fun anEmptyDayNotYetKnownToZimraOpensAtTheFirstSale() {
         val idleDay = FiscalDayState(5, start.minusHours(30), FiscalDayStatus.OPEN_PENDING, 0, null, emptyList())
-        TextStateStore(stateStorage).write(FiscalSnapshot(1, DeviceState(7001, 40, null, 5, idleDay), emptyList()))
+        TextStateStore(stateStorage).write(sealed(FiscalSnapshot(1, DeviceState(7001, 40, null, 5, idleDay), emptyList())))
         val device = device()
         assertFalse("nothing for ZIMRA to close", device.requestDayClose())
         val receipt = device.sell()
@@ -297,7 +297,7 @@ class FiscalDeviceTest {
         val sale = device.sell("10.00")
         val records = TextRecordStore(recordStorage)
         val record = records.find(7001, sale.fiscalDayNo, sale.globalNo)!!
-        records.save(record.copy(status = ReceiptSyncStatus.SUBMITTED, zimraReceiptId = 555L))
+        records.save(Seals(SoftwareSealer()).seal(record.copy(status = ReceiptSyncStatus.SUBMITTED, zimraReceiptId = 555L)))
 
         val refused = device.issue(creditNote("10.01", OriginalReceipt.ById(555))) as IssueResult.Refused
         assertEquals(listOf("RCPT035"), refused.problems.map { it.zimraCode })

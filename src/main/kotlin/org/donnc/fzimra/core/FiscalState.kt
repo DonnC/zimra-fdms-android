@@ -88,11 +88,14 @@ public data class DeviceState(
  * @property version increases by one with every change; lets a store and the
  *   SDK detect a lost or repeated write.
  * @property outbox issued receipts not yet accepted by ZIMRA, in issuing order.
+ * @property seal fzimra's tamper-evident seal over the rest of the snapshot.
+ *   Stores keep it as given; fzimra refuses a snapshot whose seal does not match.
  */
 public data class FiscalSnapshot(
     val version: Long,
     val state: DeviceState,
     val outbox: List<IssuedReceipt>,
+    val seal: String? = null,
 )
 
 /**
@@ -146,6 +149,8 @@ public data class ZimraValidation(
  * @property zimraReceiptId the receipt ID ZIMRA assigned, once accepted.
  * @property serverDate when ZIMRA received the receipt.
  * @property updatedAt when this record last changed.
+ * @property seal fzimra's tamper-evident seal over the rest of the record.
+ *   Stores keep it as given; fzimra refuses a record whose seal does not match.
  */
 public data class ReceiptRecord(
     val receipt: IssuedReceipt,
@@ -154,4 +159,5 @@ public data class ReceiptRecord(
     val serverDate: LocalDateTime? = null,
     val validations: List<ZimraValidation> = emptyList(),
     val updatedAt: Instant,
+    val seal: String? = null,
 )

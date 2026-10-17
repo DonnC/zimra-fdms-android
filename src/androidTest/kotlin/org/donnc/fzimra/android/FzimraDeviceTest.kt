@@ -3,6 +3,7 @@ package org.donnc.fzimra.android
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.donnc.fzimra.core.DeviceConfiguration
+import org.donnc.fzimra.core.FiscalIntegrityException
 import org.donnc.fzimra.core.FiscalSignature
 import org.donnc.fzimra.core.IssueResult
 import org.donnc.fzimra.core.Payment
@@ -14,6 +15,7 @@ import org.donnc.fzimra.core.SignatureStrings
 import org.donnc.fzimra.core.TaxDefinition
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,6 +39,7 @@ class FzimraDeviceTest {
     @After
     fun cleanUp() {
         KeystoreSigner.delete(alias)
+        KeystoreSealer.delete(Fzimra.sealAlias(deviceId))
         File(context.noBackupFilesDir, "org.donnc.fzimra/state/fzimra.state.$deviceId").delete()
         File(context.noBackupFilesDir, "org.donnc.fzimra/records").listFiles()
             ?.filter { it.name.startsWith("fzimra.record.$deviceId.") }?.forEach { it.delete() }
@@ -66,5 +69,15 @@ class FzimraDeviceTest {
         val again = Fzimra.device(context, configuration, KeystoreSigner.load(alias)!!)
         assertEquals(2, (again.issue(sale()) as IssueResult.Issued).receipt.globalNo)
         assertEquals(listOf(1, 2), again.pendingReceipts().map { it.globalNo })
+    }
+
+    @Test
+    fun anEditedStateFileIsRefused() {
+        val signer = KeystoreSigner.getOrCreate(alias, requireHardware = false)
+        Fzimra.device(context, configuration, signer).issue(sale())
+        val file = File(context.noBackupFilesDir, "org.donnc.fzimra/state/fzimra.state.$deviceId")
+        file.writeText(file.readText().replace("\"lastGlobalNo\":1", "\"lastGlobalNo\":0"))
+        val device = Fzimra.device(context, configuration, signer)
+        assertThrows(FiscalIntegrityException::class.java) { device.issue(sale()) }
     }
 }
