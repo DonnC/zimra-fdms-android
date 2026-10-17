@@ -38,10 +38,14 @@ public interface FiscalStateStore {
 
 /** Read-only access to the records of issued receipts. */
 public interface ReceiptRecords {
-    /** The record of [deviceId]'s receipt number [globalNo], if kept. */
-    public fun find(deviceId: Int, globalNo: Int): ReceiptRecord?
+    /**
+     * The record of [deviceId]'s receipt [globalNo] in fiscal day
+     * [fiscalDayNo], if kept. Global numbers may start again at 1 in a new
+     * fiscal day, so a receipt is identified by both.
+     */
+    public fun find(deviceId: Int, fiscalDayNo: Int, globalNo: Int): ReceiptRecord?
 
-    /** The records kept for [deviceId], in issuing order. */
+    /** The records kept for [deviceId], in issuing order (by fiscal day, then global number). */
     public fun list(deviceId: Int): List<ReceiptRecord>
 }
 
@@ -56,6 +60,6 @@ public interface ReceiptRecords {
  * short time.
  */
 public interface ReceiptRecordStore : ReceiptRecords {
-    /** Saves [record], replacing any record for the same device and global number. */
+    /** Saves [record], replacing any record for the same device, fiscal day and global number. */
     public fun save(record: ReceiptRecord)
 }

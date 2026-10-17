@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Global numbering (`GlobalNumbering`, `GlobalNumberReset`): choose when the
+  global number starts again at 1: near its limit (the default), every new
+  fiscal day, or never. A restart only happens with the first receipt of a
+  new fiscal day; reaching the limit during a day starts a new day, except
+  with `NEVER`, which refuses further receipts.
+- Credit and debit notes are checked against the original receipt: currency,
+  age, taxes and, for credit notes, the amount left to credit after earlier
+  notes. The original comes from the device's records, found by device
+  numbers or ZIMRA receipt ID, or from `ReceiptRequest.originalDetails`
+  (`OriginalReceiptDetails`). Without either, the note is issued with a
+  warning (`IssueResult.Issued.warnings`).
+- Tests: the original-receipt rules, every numbering policy, restarts never
+  mid-day, and notes checked against recorded and given originals.
 - Issuing receipts:
   - `FiscalDevice.issue` prepares, numbers, chains, dates, signs and saves a
     receipt in one step, and returns `IssueResult.Issued` or `Refused`;
@@ -86,3 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Android imports.
 - Gradle wrapper with a pinned distribution checksum.
 - README, contributing guide, security policy, code of conduct and MIT licence.
+
+### Changed
+
+- `ReceiptRecords.find` takes the fiscal day number as well as the global
+  number, since global numbers may repeat across fiscal days.

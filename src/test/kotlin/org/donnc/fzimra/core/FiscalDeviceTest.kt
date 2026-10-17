@@ -68,7 +68,7 @@ class FiscalDeviceTest {
         assertEquals(start, state.currentDay!!.openedAt)
         assertEquals(FiscalCounters.of(receipt.receipt), state.currentDay!!.counters)
         assertEquals(listOf(receipt), device.pendingReceipts())
-        assertEquals(ReceiptSyncStatus.PENDING, device.records.find(7001, 1)!!.status)
+        assertEquals(ReceiptSyncStatus.PENDING, device.records.find(7001, 1, 1)!!.status)
     }
 
     @Test
@@ -138,7 +138,7 @@ class FiscalDeviceTest {
         val receipt = device.sell()
         assertEquals(listOf(receipt), device.pendingReceipts())
         recordStorage.failWrites = false
-        assertNull(device.records.find(7001, 1))
+        assertNull(device.records.find(7001, 1, 1))
     }
 
     @Test
@@ -255,6 +255,71 @@ class FiscalDeviceTest {
         assertEquals(d("-10.00"), note.receipt.receipt.total)
         val counters = device.state()!!.currentDay!!.counters
         assertEquals(d("-10.00"), FiscalCounters.total(counters, FiscalCounterType.CREDIT_NOTE_BY_TAX))
+    }
+
+    private fun creditNote(amount: String, original: OriginalReceipt, details: OriginalReceiptDetails? = null, currency: String = "USD") =
+        invoice(
+            listOf(bread(1, d(amount))), type = ReceiptType.CREDIT_NOTE, notes = "Returned", original = original, currency = currency,
+        ).copy(originalDetails = details)
+
+    @Test
+    fun aNoteWithoutARecordOrDetailsIsIssuedWithAWarning() {
+        val note = device().issue(creditNote("10.00", OriginalReceipt.ById(1))) as IssueResult.Issued
+        assertEquals("original", note.warnings.single().field)
+        assertNull(note.warnings.single().zimraCode)
+        assertTrue("a sale has no warnings", (device().issue(sale()) as IssueResult.Issued).warnings.isEmpty())
+    }
+
+    @Test
+    fun notesAreCheckedAgainstTheRecordedOriginal() {
+        val device = device()
+        val sale = device.sell("10.00")
+        val original = OriginalReceipt.ByDevice(7001, sale.globalNo, sale.fiscalDayNo)
+
+        val first = device.issue(creditNote("6.00", original)) as IssueResult.Issued
+        assertTrue(first.warnings.isEmpty())
+        val tooMuch = device.issue(creditNote("4.01", original)) as IssueResult.Refused
+        assertEquals(listOf("RCPT035"), tooMuch.problems.map { it.zimraCode })
+        assertEquals("a refused note uses no number", 2, device.state()!!.lastGlobalNo)
+        assertTrue(device.issue(creditNote("4.00", original)) is IssueResult.Issued)
+        assertEquals(listOf("RCPT035"), (device.issue(creditNote("0.01", original)) as IssueResult.Refused).problems.map { it.zimraCode })
+
+        val otherCurrency = device.issue(creditNote("1.00", original, currency = "ZWG")) as IssueResult.Refused
+        assertTrue("RCPT042" in otherCurrency.problems.map { it.zimraCode })
+    }
+
+    @Test
+    fun aRecordedOriginalIsFoundByItsZimraId() {
+        val device = device()
+        val sale = device.sell("10.00")
+        val records = TextRecordStore(recordStorage)
+        val record = records.find(7001, sale.fiscalDayNo, sale.globalNo)!!
+        records.save(record.copy(status = ReceiptSyncStatus.SUBMITTED, zimraReceiptId = 555L))
+
+        val refused = device.issue(creditNote("10.01", OriginalReceipt.ById(555))) as IssueResult.Refused
+        assertEquals(listOf("RCPT035"), refused.problems.map { it.zimraCode })
+        assertTrue((device.issue(creditNote("10.00", OriginalReceipt.ById(555))) as IssueResult.Issued).warnings.isEmpty())
+    }
+
+    @Test
+    fun givenDetailsAreUsedWhenTheOriginalIsNotRecorded() {
+        val details = OriginalReceiptDetails("USD", start.minusMonths(2), d("8.00"), listOf(ReceiptTax(STANDARD, d("15"), d("1.04"), d("8.00"))))
+        val device = device()
+        val refused = device.issue(creditNote("8.50", OriginalReceipt.ById(77), details)) as IssueResult.Refused
+        assertEquals(listOf("RCPT035"), refused.problems.map { it.zimraCode })
+        val issued = device.issue(creditNote("8.00", OriginalReceipt.ById(77), details)) as IssueResult.Issued
+        assertTrue(issued.warnings.isEmpty())
+        val stale = device.issue(creditNote("1.00", OriginalReceipt.ById(78), details.copy(date = start.minusMonths(13)))) as IssueResult.Refused
+        assertEquals(listOf("RCPT033"), stale.problems.map { it.zimraCode })
+    }
+
+    @Test
+    fun aRecordedOriginalWinsOverGivenDetails() {
+        val device = device()
+        val sale = device.sell("10.00")
+        val wrong = OriginalReceiptDetails("USD", start, d("100.00"), sale.receipt.taxes)
+        val refused = device.issue(creditNote("10.01", OriginalReceipt.ByDevice(7001, sale.globalNo, sale.fiscalDayNo), wrong))
+        assertTrue(refused is IssueResult.Refused)
     }
 
     @Test

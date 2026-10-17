@@ -199,6 +199,8 @@ public sealed class OriginalReceipt {
  * @property pricesIncludeTax whether line prices and totals include tax.
  * @property notes a reason; mandatory for credit and debit notes.
  * @property original the receipt a credit or debit note corrects.
+ * @property originalDetails details of [original], used when the device has
+ *   no record of it, so the note can still be checked against it.
  */
 public data class ReceiptRequest(
     val type: ReceiptType,
@@ -211,6 +213,7 @@ public data class ReceiptRequest(
     val original: OriginalReceipt? = null,
     val pricesIncludeTax: Boolean = true,
     val printForm: ReceiptPrintForm = ReceiptPrintForm.RECEIPT48,
+    val originalDetails: OriginalReceiptDetails? = null,
 )
 
 /**

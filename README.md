@@ -59,6 +59,7 @@ val device = Fzimra.device(context, configuration, signer = KeystoreSigner.getOr
 when (val result = device.issue(request)) {
     is IssueResult.Issued -> {
         val receipt = result.receipt
+        result.warnings           // checks that could not be made, if any
         receipt.globalNo; receipt.receiptCounter; receipt.fiscalDayNo; receipt.date
         receipt.qrCode            // print as a QR code
         receipt.verificationCode  // print as text, e.g. 4C8B-E276-6333-0417
@@ -73,9 +74,10 @@ fzimra fills in what can be derived:
   length is near (an hour before, by default), or a close was requested with
   `requestDayClose()`, the next sale starts a new day; the previous day is
   kept until its close is confirmed.
-- **Numbers.** The receipt counter (per day) and the global number (never
-  reset) follow on without gaps. A receipt that is refused, or that cannot be
-  signed or saved, uses no number.
+- **Numbers.** The receipt counter (per day) and the global number follow on
+  without gaps. A receipt that is refused, or that cannot be signed or saved,
+  uses no number. When the global number starts again at 1 is up to you (see
+  below).
 - **Date.** Receipts are dated in Zimbabwe time, whatever the phone's time
   zone, and always after the previous receipt.
 - **Chain, signature, QR code, verification code and fiscal counters.**
@@ -86,6 +88,56 @@ lastFiscalDayNo)` before its first receipt so the numbering continues.
 
 One device must issue from one place: fzimra serialises issuing per device ID
 within the app, and re-reads the saved state for every receipt.
+
+#### Global numbering
+
+ZIMRA lets the global number start again at 1 only with the first receipt of
+a new fiscal day, so fzimra only ever restarts it there. Choose when with
+`numbering`:
+
+```kotlin
+Fzimra.device(context, configuration, signer, numbering = GlobalNumbering(GlobalNumberReset.EVERY_FISCAL_DAY))
+```
+
+| `GlobalNumberReset` | The global number starts again at 1 |
+|---|---|
+| `NEAR_LIMIT` (default) | in the first new fiscal day after it passes 90% of `limit`. If `limit` is reached during a day, that day is closed and a new one started, so the device never stops issuing. |
+| `EVERY_FISCAL_DAY` | in every new fiscal day. |
+| `NEVER` | never. Once `limit` is reached, receipts are refused. |
+
+`limit` defaults to the largest number a receipt can carry. Set it lower if
+ZIMRA gives your device a lower limit.
+
+#### Credit and debit notes
+
+A note is checked against the receipt it corrects: same currency, an
+original at most 12 months old, only taxes the original had, and, for a
+credit note, no more than is left to credit after earlier notes.
+
+When the original was issued on this device and its record is still kept,
+fzimra finds it by `OriginalReceipt.ByDevice` or, once ZIMRA has accepted it,
+by `OriginalReceipt.ById`, and counts the earlier notes against it itself.
+Otherwise pass its details:
+
+```kotlin
+val request = ReceiptRequest(
+    type = ReceiptType.CREDIT_NOTE,
+    // ...
+    notes = "Goods returned",
+    original = OriginalReceipt.ById(zimraReceiptId),
+    originalDetails = OriginalReceiptDetails(
+        currency = "USD",
+        date = originalDate,
+        total = BigDecimal("115.00"),
+        taxes = originalTaxes,
+        previousCredits = BigDecimal("15.00"), // earlier credit notes against it
+    ),
+)
+```
+
+Without a record or details the note is still issued, with a warning in
+`IssueResult.Issued.warnings`, because the checks could not be made. ZIMRA
+then makes them when the note is submitted.
 
 ### Preparing a receipt
 
@@ -139,7 +191,7 @@ when (result) {
 - **Payments.** `Payment.cash()` with no amount pays whatever is left of the
   total. Cash handed over beyond the total is returned as `change`.
 - **Credit and debit notes** need a reason (`notes`) and the original receipt
-  (`original`).
+  (`original`). Issuing also checks them against the original (see above).
 - **Every problem at once.** A refused receipt lists all its problems, each
   with the field concerned, a plain message and, when it applies, the ZIMRA
   validation code the receipt would have received.

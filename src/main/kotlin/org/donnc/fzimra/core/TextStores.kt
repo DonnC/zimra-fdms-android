@@ -48,7 +48,7 @@ internal class TextRecordStore(
 
     override fun save(record: ReceiptRecord) {
         val changes = LinkedHashMap<String, String?>()
-        changes[key(record.receipt.deviceId, record.receipt.globalNo)] = StoreCodec.encodeRecord(record)
+        changes[key(record.receipt.deviceId, record.receipt.fiscalDayNo, record.receipt.globalNo)] = StoreCodec.encodeRecord(record)
         val current = now()
         if (lastPrune == null || Duration.between(lastPrune, current) >= PRUNE_INTERVAL) {
             expiredKeys(current).forEach { if (it !in changes) changes[it] = null }
@@ -57,8 +57,8 @@ internal class TextRecordStore(
         storage.write(changes)
     }
 
-    override fun find(deviceId: Int, globalNo: Int): ReceiptRecord? =
-        storage.read(key(deviceId, globalNo))?.let(StoreCodec::decodeRecord)
+    override fun find(deviceId: Int, fiscalDayNo: Int, globalNo: Int): ReceiptRecord? =
+        storage.read(key(deviceId, fiscalDayNo, globalNo))?.let(StoreCodec::decodeRecord)
 
     override fun list(deviceId: Int): List<ReceiptRecord> {
         val prefix = "$PREFIX$deviceId."
@@ -74,7 +74,8 @@ internal class TextRecordStore(
         }
     }
 
-    private fun key(deviceId: Int, globalNo: Int) = "$PREFIX$deviceId.${globalNo.toString().padStart(10, '0')}"
+    private fun key(deviceId: Int, fiscalDayNo: Int, globalNo: Int) =
+        "$PREFIX$deviceId.${fiscalDayNo.toString().padStart(10, '0')}.${globalNo.toString().padStart(10, '0')}"
 
     companion object {
         val DEFAULT_RETENTION: Duration = Duration.ofDays(7)

@@ -1,5 +1,6 @@
 package org.donnc.fzimra.core
 
+import java.math.BigDecimal
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
@@ -32,8 +33,13 @@ public data class DeviceConfiguration(
 
 /** The outcome of [FiscalDevice.issue]. */
 public sealed class IssueResult {
-    /** The receipt was issued: numbered, signed and saved. */
-    public data class Issued(val receipt: IssuedReceipt) : IssueResult()
+    /**
+     * The receipt was issued: numbered, signed and saved.
+     *
+     * @property warnings checks that could not be made, for example a credit
+     *   note whose original receipt the device has no record of.
+     */
+    public data class Issued(val receipt: IssuedReceipt, val warnings: List<ReceiptProblem> = emptyList()) : IssueResult()
 
     /** The receipt was not issued; nothing changed. [problems] lists every reason. */
     public data class Refused(val problems: List<ReceiptProblem>) : IssueResult()
@@ -59,6 +65,7 @@ public sealed class IssueResult {
  * @param clock the time receipts are dated with.
  * @param dayCloseMargin how long before ZIMRA's maximum day length a new
  *   fiscal day is started.
+ * @param numbering when the global receipt number starts again at 1.
  */
 public class FiscalDevice(
     public val configuration: DeviceConfiguration,
@@ -67,6 +74,7 @@ public class FiscalDevice(
     private val recordStore: ReceiptRecordStore,
     private val clock: FiscalClock = ZimbabweClock(),
     private val dayCloseMargin: Duration = Duration.ofHours(1),
+    public val numbering: GlobalNumbering = GlobalNumbering(),
 ) {
     private val deviceId: Int get() = configuration.deviceId
     private val lock: Any get() = LOCKS.computeIfAbsent(deviceId) { Any() }
@@ -90,6 +98,7 @@ public class FiscalDevice(
      */
     public fun startFrom(lastGlobalNo: Int, lastFiscalDayNo: Int) {
         if (lastGlobalNo < 0 || lastFiscalDayNo < 0) throw FiscalValueException("numbers cannot be negative")
+        if (lastGlobalNo > numbering.limit) throw FiscalValueException("lastGlobalNo is above the global number limit ${numbering.limit}")
         synchronized(lock) {
             if (stateStore.read(deviceId) != null) {
                 throw IllegalStateException("device $deviceId already has fiscal state; numbering cannot be reset")
@@ -139,6 +148,32 @@ public class FiscalDevice(
             is ReceiptResult.Prepared -> result.receipt
         }
 
+        val warnings = mutableListOf<ReceiptProblem>()
+        if (prepared.original != null) {
+            val original = originalDetails(prepared.original, request.originalDetails)
+            if (original == null) {
+                warnings += ReceiptProblem(
+                    null, "original",
+                    "the original receipt is not recorded on this device and no details were given: " +
+                        "its currency, age, taxes and remaining credit were not checked",
+                )
+            } else {
+                val problems = OriginalReceiptRules.check(prepared, original, now.toLocalDate())
+                if (problems.isNotEmpty()) return IssueResult.Refused(problems)
+            }
+        }
+
+        if (state.lastGlobalNo >= numbering.limit && numbering.reset == GlobalNumberReset.NEVER) {
+            return IssueResult.Refused(
+                listOf(
+                    ReceiptProblem(
+                        null, "globalNo",
+                        "the device reached its global number limit (${numbering.limit}) and never restarts numbering",
+                    ),
+                ),
+            )
+        }
+
         state = dayForReceipt(state, now)
         val day = checkNotNull(state.currentDay)
         val date = receiptDate(now, state.lastReceiptDate, day.openedAt)
@@ -183,7 +218,43 @@ public class FiscalDevice(
         } catch (e: RuntimeException) {
             // Kept in the outbox; the record is written again when ZIMRA's answer arrives.
         }
-        IssueResult.Issued(issued)
+        IssueResult.Issued(issued, warnings)
+    }
+
+    /**
+     * Details of [original]: from this device's records when it has them,
+     * counting earlier credit and debit notes against it; otherwise [given].
+     */
+    private fun originalDetails(original: OriginalReceipt, given: OriginalReceiptDetails?): OriginalReceiptDetails? {
+        val records = try {
+            recordStore.list(deviceId)
+        } catch (e: RuntimeException) {
+            emptyList()
+        }
+        val record = records.firstOrNull { refersTo(original, it) } ?: return given
+        val notes = records.filter { other ->
+            val reference = other.receipt.receipt.original
+            reference != null && refersTo(reference, record)
+        }
+        fun total(type: ReceiptType) = notes.filter { it.receipt.receipt.type == type }
+            .fold(BigDecimal.ZERO) { sum, note -> sum.add(note.receipt.receipt.total.abs()) }
+        val issued = record.receipt
+        return OriginalReceiptDetails(
+            currency = issued.receipt.currency,
+            date = issued.date,
+            total = issued.receipt.total,
+            taxes = issued.receipt.taxes,
+            previousCredits = total(ReceiptType.CREDIT_NOTE),
+            previousDebits = total(ReceiptType.DEBIT_NOTE),
+        )
+    }
+
+    /** Whether [reference] identifies the receipt of [record]. */
+    private fun refersTo(reference: OriginalReceipt, record: ReceiptRecord): Boolean = when (reference) {
+        is OriginalReceipt.ById -> record.zimraReceiptId == reference.receiptId
+        is OriginalReceipt.ByDevice -> reference.deviceId == record.receipt.deviceId &&
+            reference.fiscalDayNo == record.receipt.fiscalDayNo &&
+            reference.receiptGlobalNo == record.receipt.globalNo
     }
 
     /**
@@ -193,11 +264,18 @@ public class FiscalDevice(
      */
     private fun dayForReceipt(state: DeviceState, now: LocalDateTime): DeviceState {
         val day = state.currentDay
+        val atLimit = state.lastGlobalNo >= numbering.limit
         if (day != null && day.isUnannouncedAndEmpty()) {
-            // Not yet known to ZIMRA and still empty: its opening is the first sale.
-            return state.copy(currentDay = day.copy(openedAt = now))
+            // Not yet known to ZIMRA and still empty: its opening is the first sale,
+            // which is the first receipt of a new day, so numbering may restart here.
+            val restart = atLimit || numbering.restartsAt(state.lastGlobalNo)
+            return state.copy(
+                lastGlobalNo = if (restart) 0 else state.lastGlobalNo,
+                currentDay = day.copy(openedAt = now),
+            )
         }
-        if (day != null && day.status.acceptsReceipts() && !tooLong(day, now)) return state
+        // Reaching the limit rolls the day over: numbering may only restart in a new day.
+        if (day != null && day.status.acceptsReceipts() && !tooLong(day, now) && !atLimit) return state
 
         val closing = when {
             day == null -> state.closingDays
@@ -206,7 +284,9 @@ public class FiscalDevice(
             else -> state.closingDays + day
         }
         val number = state.lastFiscalDayNo + 1
+        val restart = atLimit || numbering.restartsAt(state.lastGlobalNo)
         return state.copy(
+            lastGlobalNo = if (restart) 0 else state.lastGlobalNo, // the new day's first receipt is number 1
             lastFiscalDayNo = number,
             currentDay = FiscalDayState(number, now, FiscalDayStatus.OPEN_PENDING, 0, null, emptyList()),
             closingDays = closing,

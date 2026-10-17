@@ -60,7 +60,7 @@ class FzimraDeviceTest {
             receipt.receipt.total, receipt.receipt.taxes, receipt.previousReceiptHash,
         )
         assertTrue(FiscalSignature.verify(signer.publicKey, canonical, receipt.signature.signature))
-        assertEquals(ReceiptSyncStatus.PENDING, device.records.find(deviceId, 1)?.status)
+        assertEquals(ReceiptSyncStatus.PENDING, device.records.find(deviceId, 1, 1)?.status)
 
         // A new instance, as after an app restart, continues the numbering.
         val again = Fzimra.device(context, configuration, KeystoreSigner.load(alias)!!)

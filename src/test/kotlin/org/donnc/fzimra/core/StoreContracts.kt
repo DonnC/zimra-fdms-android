@@ -63,12 +63,12 @@ abstract class ReceiptRecordStoreContract {
         val store = newStore()
         val record = sampleRecord(1)
         store.save(record)
-        assertEquals(record, store.find(7001, 1))
+        assertEquals(record, store.find(7001, 4, 1))
     }
 
     @Test
     fun unknownRecordsAreNull() {
-        assertNull(newStore().find(7001, 1))
+        assertNull(newStore().find(7001, 4, 1))
     }
 
     @Test
@@ -77,7 +77,7 @@ abstract class ReceiptRecordStoreContract {
         store.save(sampleRecord(1, ReceiptSyncStatus.PENDING))
         val accepted = sampleRecord(1, ReceiptSyncStatus.SUBMITTED)
         store.save(accepted)
-        assertEquals(accepted, store.find(7001, 1))
+        assertEquals(accepted, store.find(7001, 4, 1))
         assertEquals(1, store.list(7001).size)
     }
 
@@ -96,6 +96,6 @@ abstract class ReceiptRecordStoreContract {
         store.save(sampleRecord(2, deviceId = 2))
         assertEquals(1, store.list(1).size)
         assertEquals(2, store.list(2).size)
-        assertNull(store.find(1, 2))
+        assertNull(store.find(1, 4, 2))
     }
 }

@@ -49,8 +49,8 @@ class TextRecordStoreRetentionTest {
         store.save(sampleRecord(1, ReceiptSyncStatus.SUBMITTED, daysAgo(8)))
         now = now.plus(Duration.ofHours(2))
         store.save(sampleRecord(2, ReceiptSyncStatus.SUBMITTED, now))
-        assertNull(store.find(7001, 1))
-        assertNotNull(store.find(7001, 2))
+        assertNull(store.find(7001, 4, 1))
+        assertNotNull(store.find(7001, 4, 2))
     }
 
     @Test
@@ -58,7 +58,7 @@ class TextRecordStoreRetentionTest {
         store.save(sampleRecord(1, ReceiptSyncStatus.SUBMITTED, daysAgo(6)))
         now = now.plus(Duration.ofHours(2))
         store.save(sampleRecord(2, ReceiptSyncStatus.SUBMITTED, now))
-        assertNotNull(store.find(7001, 1))
+        assertNotNull(store.find(7001, 4, 1))
     }
 
     @Test
@@ -73,18 +73,18 @@ class TextRecordStoreRetentionTest {
     @Test
     fun theRecordBeingSavedIsNeverRemovedEvenIfOld() {
         store.save(sampleRecord(1, ReceiptSyncStatus.SUBMITTED, daysAgo(10)))
-        assertNotNull(store.find(7001, 1))
+        assertNotNull(store.find(7001, 4, 1))
     }
 
     @Test
     fun pruningRunsAtMostOnceAnHour() {
         store.save(sampleRecord(1, ReceiptSyncStatus.SUBMITTED, now)) // prunes now
         now = now.plus(Duration.ofMinutes(10))
-        storage.write(mapOf("fzimra.record.7001.0000000009" to StoreCodec.encodeRecord(sampleRecord(9, ReceiptSyncStatus.SUBMITTED, daysAgo(9)))))
+        storage.write(mapOf("fzimra.record.7001.0000000004.0000000009" to StoreCodec.encodeRecord(sampleRecord(9, ReceiptSyncStatus.SUBMITTED, daysAgo(9)))))
         store.save(sampleRecord(2, ReceiptSyncStatus.SUBMITTED, now)) // within the hour: no pruning
-        assertNotNull(store.find(7001, 9))
+        assertNotNull(store.find(7001, 4, 9))
         now = now.plus(Duration.ofHours(1))
         store.save(sampleRecord(3, ReceiptSyncStatus.SUBMITTED, now))
-        assertNull(store.find(7001, 9))
+        assertNull(store.find(7001, 4, 9))
     }
 }
