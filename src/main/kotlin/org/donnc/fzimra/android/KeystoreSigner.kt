@@ -10,8 +10,8 @@ import android.security.keystore.StrongBoxUnavailableException
 import org.donnc.fzimra.core.DeviceCertificate
 import org.donnc.fzimra.core.DeviceCertificateException
 import org.donnc.fzimra.core.DeviceIdentity
+import org.donnc.fzimra.core.DeviceKey
 import org.donnc.fzimra.core.SignatureAlgorithm
-import org.donnc.fzimra.core.Signer
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -64,7 +64,7 @@ public class KeystoreSigner private constructor(
     public val alias: String,
     private val privateKey: PrivateKey,
     override val publicKey: PublicKey,
-) : Signer {
+) : DeviceKey {
     override val algorithm: SignatureAlgorithm = SignatureAlgorithm.ECDSA_P256_SHA256
 
     override fun sign(data: ByteArray): ByteArray = Signature.getInstance(algorithm.jcaName).run {
@@ -97,6 +97,10 @@ public class KeystoreSigner private constructor(
     public val zimraCertificateExpiry: java.time.Instant?
         get() = zimraChain()?.first()?.notAfter?.toInstant()
 
+    /** The installed ZIMRA certificate, or `null` before registration. */
+    override val certificate: X509Certificate?
+        get() = zimraChain()?.first()
+
     /** Whether a ZIMRA device certificate has been installed for the key. */
     public val hasZimraCertificate: Boolean
         get() = zimraChain() != null
@@ -109,7 +113,7 @@ public class KeystoreSigner private constructor(
      * @throws DeviceCertificateException if [certificatePem] is not a valid
      *   certificate for this key and the device in [identity].
      */
-    public fun installCertificate(certificatePem: String, identity: DeviceIdentity) {
+    override fun installCertificate(certificatePem: String, identity: DeviceIdentity) {
         val chain = DeviceCertificate.parse(certificatePem)
         DeviceCertificate.check(chain.first(), publicKey, identity)
         Keystore.keyStore().setKeyEntry(alias, privateKey, null, chain.toTypedArray())

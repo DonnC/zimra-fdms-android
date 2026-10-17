@@ -5,6 +5,9 @@ import org.donnc.fzimra.core.DeviceConfiguration
 import org.donnc.fzimra.core.DeviceIdentity
 import org.donnc.fzimra.core.FdmsClient
 import org.donnc.fzimra.core.FdmsEnvironment
+import org.donnc.fzimra.core.FdmsObserver
+import org.donnc.fzimra.core.FiscalTerminal
+import org.donnc.fzimra.core.Gateway
 import org.donnc.fzimra.core.FiscalClock
 import org.donnc.fzimra.core.FiscalDevice
 import org.donnc.fzimra.core.FiscalStateStore
@@ -109,6 +112,73 @@ public object Fzimra {
         FzimraBackground.cancel(app, deviceId)
         DefaultStores.delete(app, deviceId)
         KeystoreSealer.delete(sealAlias(deviceId))
+    }
+
+    private val terminals = java.util.concurrent.ConcurrentHashMap<String, FiscalTerminal>()
+
+    /**
+     * The fiscal terminal for [device] on [gateway]: everything a point of sale
+     * needs, in one object. Call it in `Application.onCreate`, so background
+     * sync can reach ZIMRA even when no screen is open; later calls return the
+     * same terminal.
+     *
+     * ```kotlin
+     * val terminal = Fzimra.terminal(context, DeviceIdentity(12345, "SN-001", "MyPOS", "1.0"), ZimraGateway.TEST)
+     * terminal.register(activationKey)   // once
+     * terminal.sell(lines)
+     * ```
+     *
+     * The terminal keeps its key in Android Keystore, its data in the app's
+     * private no-backup storage, separately for each gateway, and sends
+     * receipts to ZIMRA in the background as soon as the network allows.
+     * While the app runs it reports the device online and renews the
+     * certificate before it expires.
+     *
+     * @param observer sees every exchange with the gateway, for example to log it.
+     * @param numbering when the global receipt number starts again at 1.
+     */
+    public fun terminal(
+        context: Context,
+        device: DeviceIdentity,
+        gateway: Gateway = ZimraGateway.TEST,
+        observer: FdmsObserver? = null,
+        numbering: GlobalNumbering = GlobalNumbering(),
+    ): FiscalTerminal {
+        val app = context.applicationContext
+        val namespace = gateway.name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+        val key = "$namespace/${device.deviceId}"
+        terminals[key]?.let { return it }
+        synchronized(terminals) {
+            terminals[key]?.let { return it }
+            val sealAlias = "fzimra.seal.$namespace.${device.deviceId}"
+            val terminal = FiscalTerminal(
+                identity = device,
+                gateway = gateway,
+                keys = KeystoreKeyStore("fzimra.key.$namespace.${device.deviceId}", allowSoftware = gateway.allowsSoftwareKeys),
+                stateStore = DefaultStores.state(app, namespace),
+                recordStore = DefaultStores.records(app, namespace),
+                terminalStore = DefaultStores.terminal(app, namespace, device.deviceId),
+                sealer = { signer ->
+                    KeystoreSealer.getOrCreate(sealAlias, requireHardware = (signer as? KeystoreSigner)?.securityLevel != KeySecurityLevel.SOFTWARE)
+                },
+                observer = observer,
+                numbering = numbering,
+            )
+            terminal.onUnregister = {
+                FzimraBackground.cancel(app, device.deviceId)
+                DefaultStores.delete(app, device.deviceId, namespace)
+                KeystoreSealer.delete(sealAlias)
+            }
+            terminal.addWorkListener { FzimraBackground.requestSync(app, device.deviceId) }
+            FzimraBackground.attach(device.deviceId, terminal)
+            Upkeep.start(terminal)
+            terminals[key] = terminal
+            // Receipts left unsent, for example before the phone restarted, are sent now.
+            if (terminal.isRegistered && runCatching { terminal.status().pendingReceipts }.getOrDefault(0) > 0) {
+                FzimraBackground.requestSync(app, device.deviceId)
+            }
+            return terminal
+        }
     }
 
     /** The Keystore alias of the default sealing key for [deviceId]. */

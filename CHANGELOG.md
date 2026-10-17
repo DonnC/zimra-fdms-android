@@ -11,6 +11,18 @@ The first release.
 
 ### Added
 
+- `FiscalTerminal`, the whole SDK in one object: `Fzimra.terminal(context,
+  device, gateway)`, then `register`, `sell`, `refund`, `closeDay`, `status`
+  and `addListener`. It creates the device key and certificate itself, keeps
+  ZIMRA's configuration for offline use, continues numbering ZIMRA already
+  has, numbers invoices, syncs in the background without any setup, pings
+  ZIMRA while the app runs and renews the certificate before it expires.
+  `TerminalStatus` says where it stands, including the day's end and what
+  needs attention. `Taxes` finds the taxpayer's standard, zero-rated and
+  exempt taxes; `ReceiptLine.sale` takes them directly.
+- Gateways: `ZimraGateway.TEST`, `ZimraGateway.PRODUCTION`, and
+  `SimulatorGateway` in the simulator library, each with its own storage.
+  `FdmsObserver` sees every exchange.
 - Maven publishing for `org.donnc:fzimra` and `org.donnc:fzimra-simulator`,
   with sources and KDoc (`./gradlew publishAllPublicationsToLocalRepository`).
 - Continuous integration: build, lint and unit tests of every module on each

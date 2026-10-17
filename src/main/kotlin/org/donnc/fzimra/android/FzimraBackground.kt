@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.os.PersistableBundle
 import org.donnc.fzimra.core.FiscalSync
+import org.donnc.fzimra.core.FiscalTerminal
 import org.donnc.fzimra.core.NextSync
 import org.donnc.fzimra.core.SyncOutcome
 import org.donnc.fzimra.core.SyncReport
@@ -55,7 +56,13 @@ public object FzimraBackground {
     @Volatile
     private var jobIdBase: Int = DEFAULT_JOB_ID_BASE
 
+    private val terminals = ConcurrentHashMap<Int, FiscalTerminal>()
     private val running = ConcurrentHashMap<Int, AtomicBoolean>()
+
+    /** A terminal made with `Fzimra.terminal` syncs itself; no provider is needed for it. */
+    internal fun attach(deviceId: Int, terminal: FiscalTerminal) {
+        terminals[deviceId] = terminal
+    }
     private val rerun = ConcurrentHashMap<Int, AtomicBoolean>()
 
     /**
@@ -81,7 +88,7 @@ public object FzimraBackground {
     }
 
     /** Whether [install] was called in this process. */
-    public val isInstalled: Boolean get() = provider != null
+    public val isInstalled: Boolean get() = provider != null || terminals.isNotEmpty()
 
     /**
      * Asks for a background run for [deviceId] after [delay] once a network is
@@ -127,8 +134,12 @@ public object FzimraBackground {
      * since scheduling a job's own ID stops it.
      */
     internal fun run(context: Context, deviceId: Int): Decision {
-        val sync = provider?.syncFor(context, deviceId) ?: return Decision(null, false, null)
-        val report = sync.run(RUN_LIMIT)
+        val terminal = terminals[deviceId]
+        val report = when {
+            terminal != null -> terminal.sync()
+            // Started before the app created its terminal (or installed a provider): try again shortly.
+            else -> provider?.syncFor(context, deviceId)?.run(RUN_LIMIT) ?: return Decision(null, retryWithBackoff = true, followUp = null)
+        }
         try {
             onReport?.invoke(deviceId, report)
         } catch (e: RuntimeException) {

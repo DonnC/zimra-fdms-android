@@ -63,6 +63,14 @@ public class ReceiptLine private constructor(
                 exactDecimal(unitPrice, "unitPrice"), null, taxId, hsCode,
             )
 
+        /** A sale line priced per unit, taxed with [tax] from `FiscalTerminal.taxes`. */
+        public fun sale(name: String, quantity: Number, unitPrice: Number, tax: TaxDefinition, hsCode: String? = null): ReceiptLine =
+            sale(name, quantity, unitPrice, tax.taxId, hsCode)
+
+        /** A sale line whose total the host app has already worked out, taxed with [tax]. */
+        public fun saleWithTotal(name: String, quantity: Number, total: Number, tax: TaxDefinition, hsCode: String? = null): ReceiptLine =
+            saleWithTotal(name, quantity, total, tax.taxId, hsCode)
+
         /** A sale line whose total the host app has already worked out, for example after its own discounts. */
         public fun saleWithTotal(name: String, quantity: Number, total: Number, taxId: Int, hsCode: String? = null): ReceiptLine =
             ReceiptLine(

@@ -24,7 +24,6 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Base64
@@ -219,7 +218,8 @@ public class FdmsSimulator(
         val operationId = "SIM" + (++operation).toString().padStart(6, '0')
         val headers = mapOf(
             "content-type" to "application/json",
-            "date" to DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now(ZoneOffset.UTC).plus(faults.dateSkew)),
+            // The same clock that dates receipts, so a client correcting its clock from this stays consistent.
+            "date" to DateTimeFormatter.RFC_1123_DATE_TIME.format(clock().atZone(HARARE).withZoneSameInstant(ZoneOffset.UTC).plus(faults.dateSkew)),
             "operationid" to operationId,
         )
         if (faults.serverErrors > 0) {
