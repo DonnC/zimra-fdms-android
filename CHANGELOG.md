@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Syncing with ZIMRA (`FiscalSync`): opens fiscal days with ZIMRA, submits
+  receipts strictly in order, closes due days with the device's signed
+  counters and follows each close to ZIMRA's confirmation or refusal; each
+  run reports a `SyncOutcome` (`COMPLETE`, `WAITING`, `OFFLINE`, `BLOCKED`,
+  `BUSY`) and what it did (`SyncReport`, `ClosedDay`):
+  - compares the device with ZIMRA before anything is sent;
+  - applies ZIMRA's configuration before opening a day; a changed VAT
+    registration closes the current day (`DayCloseReason.VAT_REGISTRATION_CHANGED`);
+  - recognises lost answers to openings, receipts and closes, so nothing is
+    sent twice;
+  - checks ZIMRA's signatures on receipts and closed days
+    (`ReceiptRecord.zimraSignatureVerified`, `ClosedDay.zimraSignatureVerified`);
+  - stops at a refused receipt, a day with Grey or Red receipts, or a refused
+    close, and notices a day closed in ZIMRA's portal;
+  - never holds up issuing; one run per device at a time.
+- `FdmsClient.openDay`, `submitReceipt` and `closeDay`, with receipts and
+  counters in ZIMRA's JSON; `ZimraStatus` carries ZIMRA's close details.
+- `FiscalDevice.updateConfiguration` and `retryDayClose`.
+- Day and record fields for sync: `FiscalDayState.zimraOpened`,
+  `blockingReceipts`, `closeSignature`, `closingErrorCode`;
+  `ReceiptRecord.zimraSignature`.
+- Tests against an in-memory gateway that checks every receipt's signature
+  and sequence from the JSON it receives, adds up its own counters, checks
+  the close against them and signs what it accepts: full days, offline and
+  lost answers, queued days, restarts, Grey and Red receipts, portal closes,
+  refused receipts and closes, configuration and VAT changes, and issuing
+  during a sync.
 - Connecting to ZIMRA:
   - `FdmsClient`: taxpayer verification, device registration, certificate
     renewal, configuration, status, ping and ZIMRA's signing certificate,
@@ -145,6 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `FiscalDevice.configuration` can be updated (`updateConfiguration`).
 - `BuyerAddress` and `BuyerContacts` are now `Address` and `Contacts`, also
   used for the taxpayer's branch.
 - `FiscalDevice` takes a `sealer`.

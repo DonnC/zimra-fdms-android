@@ -74,7 +74,7 @@ public sealed class IssueResult {
  * @param numbering when the global receipt number starts again at 1.
  */
 public class FiscalDevice(
-    public val configuration: DeviceConfiguration,
+    configuration: DeviceConfiguration,
     private val signer: Signer,
     private val stateStore: FiscalStateStore,
     private val recordStore: ReceiptRecordStore,
@@ -83,7 +83,15 @@ public class FiscalDevice(
     private val dayCloseMargin: Duration = Duration.ofHours(1),
     public val numbering: GlobalNumbering = GlobalNumbering(),
 ) {
-    private val deviceId: Int get() = configuration.deviceId
+    /**
+     * The configuration receipts are issued with. `FiscalSync` keeps it up to
+     * date with ZIMRA's; see [updateConfiguration].
+     */
+    @Volatile
+    public var configuration: DeviceConfiguration = configuration
+        private set
+
+    private val deviceId: Int = configuration.deviceId
     private val lock: Any get() = LOCKS.computeIfAbsent(deviceId) { Any() }
     private val seals = Seals(sealer)
 
@@ -229,6 +237,74 @@ public class FiscalDevice(
         }
         return problems
     }
+
+    /**
+     * Issues later receipts with [configuration], for example after ZIMRA
+     * changed the taxes. If the taxpayer's VAT registration changed while the
+     * current day has receipts, that day is closed: ZIMRA requires a new day
+     * before receipts reflect the change.
+     *
+     * @throws IllegalArgumentException if [configuration] is for another device.
+     */
+    public fun updateConfiguration(configuration: DeviceConfiguration) {
+        require(configuration.deviceId == deviceId) { "the configuration is for device ${configuration.deviceId}, not $deviceId" }
+        synchronized(lock) {
+            val vatChanged = configuration.isVatPayer != this.configuration.isVatPayer
+            this.configuration = configuration
+            if (!vatChanged) return
+            val snapshot = read() ?: return
+            val day = snapshot.state.currentDay ?: return
+            if (!day.status.acceptsReceipts() || day.receiptCounter == 0) return
+            write(
+                snapshot.copy(
+                    version = snapshot.version + 1,
+                    state = snapshot.state.copy(
+                        currentDay = day.copy(status = FiscalDayStatus.CLOSE_REQUESTED, closeReason = DayCloseReason.VAT_REGISTRATION_CHANGED),
+                    ),
+                ),
+            )
+        }
+    }
+
+    /**
+     * Sends the close of fiscal day [fiscalDayNo] again after ZIMRA refused it,
+     * once the cause is fixed. The next `FiscalSync.run` sends it.
+     *
+     * @return `true` if the day's close had been refused and is now requested again.
+     */
+    public fun retryDayClose(fiscalDayNo: Int): Boolean = synchronized(lock) {
+        val snapshot = read() ?: return false
+        var found = false
+        val state = snapshot.state.mapDays { day ->
+            if (day.fiscalDayNo == fiscalDayNo && day.status == FiscalDayStatus.CLOSE_FAILED) {
+                found = true
+                day.copy(status = FiscalDayStatus.CLOSE_REQUESTED, closingErrorCode = null)
+            } else {
+                day
+            }
+        }
+        if (found) write(snapshot.copy(version = snapshot.version + 1, state = state))
+        found
+    }
+
+    // -- for FiscalSync -----------------------------------------------------------
+
+    internal fun currentSnapshot(): FiscalSnapshot? = read()
+
+    /**
+     * Applies [change] to the stored snapshot under the issuing lock, and saves
+     * the result unless [change] returns `null`.
+     */
+    internal fun change(change: (FiscalSnapshot) -> FiscalSnapshot?): Boolean = synchronized(lock) {
+        val snapshot = read() ?: return false
+        val next = change(snapshot) ?: return false
+        write(next.copy(version = snapshot.version + 1))
+        true
+    }
+
+    internal fun saveRecord(record: ReceiptRecord) = recordStore.save(seals.seal(record))
+
+    internal fun sign(canonical: String): DeviceSignature = FiscalSignature.sign(signer, canonical)
 
     /**
      * Asks for the current fiscal day to be closed. The next receipt starts a
@@ -436,7 +512,11 @@ public class FiscalDevice(
 
     private fun FiscalDayStatus.acceptsReceipts() = this == FiscalDayStatus.OPEN_PENDING || this == FiscalDayStatus.OPENED
 
-    private fun FiscalDayState.isUnannouncedAndEmpty() = status == FiscalDayStatus.OPEN_PENDING && receiptCounter == 0
+    private fun FiscalDayState.isUnannouncedAndEmpty() =
+        status == FiscalDayStatus.OPEN_PENDING && receiptCounter == 0 && !zimraOpened
+
+    private fun DeviceState.mapDays(transform: (FiscalDayState) -> FiscalDayState) =
+        copy(currentDay = currentDay?.let(transform), closingDays = closingDays.map(transform))
 
     private companion object {
         /** One lock per device ID for the whole process. */

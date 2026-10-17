@@ -100,6 +100,17 @@ public enum class ZimraDayStatus(public val zimraName: String) {
 }
 
 /**
+ * A signature ZIMRA made, on an accepted receipt or a closed fiscal day.
+ *
+ * @property certificateThumbprint the SHA-1 thumbprint of the signing certificate.
+ */
+public data class ZimraSignature(
+    val hash: String?,
+    val signature: String,
+    val certificateThumbprint: String?,
+)
+
+/**
  * What ZIMRA knows of the device's fiscal days and receipts.
  *
  * @property lastFiscalDayNo the open day, or the last closed one; `null`
@@ -111,6 +122,10 @@ public enum class ZimraDayStatus(public val zimraName: String) {
  *   [ZimraDayStatus.CLOSE_FAILED].
  * @property dayClosed when the last day was closed, when [dayStatus] is
  *   [ZimraDayStatus.CLOSED].
+ * @property reconciliationMode how the last closed day was closed: `Auto`
+ *   (by the device) or `Manual` (in ZIMRA's portal).
+ * @property serverSignature ZIMRA's signature on the last closed day.
+ * @property counters ZIMRA's counters for the day, when it reports them.
  */
 public data class ZimraStatus(
     val operationId: String?,
@@ -119,6 +134,37 @@ public data class ZimraStatus(
     val lastReceiptGlobalNo: Int?,
     val closingErrorCode: String?,
     val dayClosed: LocalDateTime?,
+    val reconciliationMode: String? = null,
+    val serverSignature: ZimraSignature? = null,
+    val counters: List<FiscalCounter> = emptyList(),
+)
+
+/** ZIMRA acknowledged a fiscal day's opening. */
+public data class OpenedDay(
+    val operationId: String?,
+    val fiscalDayNo: Int,
+)
+
+/** A finding ZIMRA reported on an accepted receipt. */
+public data class ReceiptFinding(
+    val code: String,
+    val colour: String?,
+    val description: String?,
+)
+
+/**
+ * ZIMRA accepted a receipt.
+ *
+ * @property receiptId ZIMRA's ID for the receipt.
+ * @property serverDate when ZIMRA received it.
+ * @property findings validation findings; a Grey or Red one blocks the day's close.
+ */
+public data class AcceptedReceipt(
+    val operationId: String?,
+    val receiptId: Long,
+    val serverDate: LocalDateTime,
+    val signature: ZimraSignature?,
+    val findings: List<ReceiptFinding>,
 )
 
 /**

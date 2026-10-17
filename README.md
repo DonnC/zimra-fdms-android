@@ -333,6 +333,55 @@ Passing the same `ZimbabweClock` to the client and the device keeps receipt
 dates in step with ZIMRA's clock: each answer's time corrects the clock's
 offset, so receipts are never dated ahead of ZIMRA.
 
+#### Syncing
+
+`FiscalSync` brings ZIMRA up to date with a device: it opens fiscal days with
+ZIMRA, submits receipts strictly in issuing order, closes the days that are
+due, and follows each close until ZIMRA confirms or refuses it.
+
+```kotlin
+val sync = FiscalSync(device, zimra)
+val report = sync.run()          // off the main thread
+when (report.outcome) {
+    SyncOutcome.COMPLETE -> {}   // nothing waiting
+    SyncOutcome.WAITING -> {}    // ZIMRA is validating a close: run again shortly
+    SyncOutcome.OFFLINE -> {}    // run again when online
+    SyncOutcome.BLOCKED -> showToSupervisor(report.problems)
+    SyncOutcome.BUSY -> {}       // a sync was already running
+}
+report.accepted                  // records of receipts ZIMRA accepted
+report.closedDays                // days ZIMRA confirmed closed, with ZIMRA's signature
+```
+
+Each run does as much as it safely can and stops at the first thing it must
+wait for. Sales are never held up: network calls are made without the
+device's lock. Only one run per device happens at a time. Run it after each
+sale, when the network returns, and periodically while the outcome is not
+`COMPLETE`.
+
+Along the way a run:
+
+- first compares the device with ZIMRA (`compareWith`) and stops if they
+  disagree;
+- fetches ZIMRA's configuration before opening a day and applies it to the
+  device (`FiscalDevice.updateConfiguration`); if the taxpayer's VAT
+  registration changed, the current day is closed, as ZIMRA requires;
+- recognises an opening or a receipt whose answer was lost, so nothing is
+  sent twice;
+- checks ZIMRA's signatures on accepted receipts and closed days against
+  ZIMRA's signing certificate, and records the result;
+- notices a day closed in ZIMRA's portal and starts a new one with the next
+  sale.
+
+A run stops with `BLOCKED` when a person has to act:
+
+| Problem | What to do |
+|---|---|
+| The device disagrees with ZIMRA | See `compareWith`. Do not issue until resolved. |
+| ZIMRA refused a receipt | Its record is `REJECTED`. Later receipts wait, since ZIMRA takes them only in order. Resolve it with ZIMRA support; the next run sends it again. |
+| A day holds Grey or Red receipts | ZIMRA does not let the device close it. It must be closed in ZIMRA's portal; the next run notices. |
+| ZIMRA refused a day's close | Fix the cause (`closingErrorCode`), then call `device.retryDayClose(fiscalDayNo)`. |
+
 #### Errors
 
 | Exception | Meaning |

@@ -107,6 +107,59 @@ public class FdmsClient(
         return FdmsWire.serverCertificate(answer)
     }
 
+    /**
+     * Tells ZIMRA that fiscal day [fiscalDayNo] opened at [openedAt] on the
+     * device. ZIMRA accepts it only after the previous day is closed.
+     */
+    public fun openDay(fiscalDayNo: Int, openedAt: LocalDateTime): OpenedDay {
+        val answer = call(
+            "POST", device("OpenDay"),
+            FdmsReceiptWire.obj(
+                "fiscalDayOpened" to JsonValue.Str(SignatureStrings.formatDateTime(openedAt)),
+                "fiscalDayNo" to FdmsReceiptWire.num(fiscalDayNo),
+            ),
+            deviceAuthenticated = true, idempotent = false,
+        )
+        return FdmsWire.openedDay(answer)
+    }
+
+    /**
+     * Submits an issued receipt. Sending the same receipt again is safe: ZIMRA
+     * answers with the receipt it already accepted.
+     */
+    public fun submitReceipt(receipt: IssuedReceipt): AcceptedReceipt {
+        val answer = call(
+            "POST", device("SubmitReceipt"),
+            FdmsReceiptWire.obj("receipt" to FdmsReceiptWire.receipt(receipt)),
+            deviceAuthenticated = true, idempotent = false,
+        )
+        return FdmsWire.acceptedReceipt(answer)
+    }
+
+    /**
+     * Asks ZIMRA to close fiscal day [fiscalDayNo] with its [counters], signed
+     * by the device. ZIMRA validates the day afterwards; follow with
+     * [getStatus] for the outcome.
+     *
+     * @return ZIMRA's operation ID.
+     */
+    public fun closeDay(fiscalDayNo: Int, counters: List<FiscalCounter>, signature: DeviceSignature, receiptCounter: Int): String? {
+        val answer = call(
+            "POST", device("CloseDay"),
+            FdmsReceiptWire.obj(
+                "fiscalDayNo" to FdmsReceiptWire.num(fiscalDayNo),
+                "fiscalDayCounters" to FdmsReceiptWire.counters(counters),
+                "fiscalDayDeviceSignature" to FdmsReceiptWire.obj(
+                    "hash" to JsonValue.Str(signature.hash),
+                    "signature" to JsonValue.Str(signature.signature),
+                ),
+                "receiptCounter" to FdmsReceiptWire.num(receiptCounter),
+            ),
+            deviceAuthenticated = true, idempotent = false,
+        )
+        return FdmsWire.operationId(answer)
+    }
+
     // -- plumbing ---------------------------------------------------------------
 
     private fun public(endpoint: String) = "/Public/v1/${identity.deviceId}/$endpoint"
@@ -229,7 +282,44 @@ internal object FdmsWire {
         lastReceiptGlobalNo = o.optInt("lastReceiptGlobalNo"),
         closingErrorCode = o.optText("fiscalDayClosingErrorCode"),
         dayClosed = o.optText("fiscalDayClosed")?.let(::dateTime),
+        reconciliationMode = o.optText("fiscalDayReconciliationMode"),
+        serverSignature = o.optObj("fiscalDayServerSignature")?.let(::signature),
+        // ZIMRA's documents name the list both ways.
+        counters = (o.list("fiscalDayCounters").ifEmpty { o.list("fiscalDayCounter") }).map { counter(it.asObj()) },
     )
+
+    fun operationId(o: JsonValue.Obj): String? = o.optText("operationID")
+
+    fun openedDay(o: JsonValue.Obj) = OpenedDay(o.optText("operationID"), o.int("fiscalDayNo"))
+
+    fun acceptedReceipt(o: JsonValue.Obj) = AcceptedReceipt(
+        operationId = o.optText("operationID"),
+        receiptId = o.optText("receiptID")?.toLongOrNull() ?: throw FdmsProtocolException("ZIMRA's answer has no 'receiptID'"),
+        serverDate = dateTime(o.text("serverDate")),
+        signature = o.optObj("receiptServerSignature")?.let(::signature),
+        findings = o.list("validationErrors").map {
+            val v = it.asObj()
+            ReceiptFinding(v.optText("validationErrorCode").orEmpty(), v.optText("validationErrorColor"), v.optText("validationErrorDescription"))
+        },
+    )
+
+    private fun signature(o: JsonValue.Obj): ZimraSignature? {
+        val signature = o.optText("signature") ?: return null
+        return ZimraSignature(o.optText("hash"), signature, o.optText("certificateThumbprint"))
+    }
+
+    private fun counter(o: JsonValue.Obj): FiscalCounter = try {
+        FiscalCounter(
+            type = enumByName(o.text("fiscalCounterType"), FiscalCounterType.entries) { it.specName },
+            currency = o.text("fiscalCounterCurrency"),
+            value = o.optDecimal("fiscalCounterValue") ?: throw FdmsProtocolException("a counter has no value"),
+            taxId = o.optInt("fiscalCounterTaxID"),
+            taxPercent = o.optDecimal("fiscalCounterTaxPercent"),
+            moneyType = o.optText("fiscalCounterMoneyType")?.let { name -> enumByName(name, MoneyType.entries) { it.specName } },
+        )
+    } catch (e: FiscalValueException) {
+        throw FdmsProtocolException("ZIMRA sent an invalid counter: ${e.message}", e)
+    }
 
     fun reportingFrequency(o: JsonValue.Obj): Int = o.int("reportingFrequency")
 

@@ -171,6 +171,90 @@ class FdmsClientTest {
         assertFalse(certificate.deviceAuthenticated)
     }
 
+    private val issuedNote = IssuedReceipt(
+        deviceId = 321, fiscalDayNo = 4, receiptCounter = 2, globalNo = 77, date = LocalDateTime.of(2026, 10, 17, 10, 5, 9),
+        receipt = prepared(
+            invoice(
+                listOf(
+                    ReceiptLine.sale("Bread", 2, d("10.00"), STANDARD, hsCode = "19059000"),
+                    ReceiptLine.sale("Book", 1, d("3.00"), EXEMPT, hsCode = "49019900"),
+                ),
+                type = ReceiptType.CREDIT_NOTE, notes = "Returned", original = OriginalReceipt.ById(9001),
+                buyer = Buyer("Acme Ltd", "2000000001", vatNumber = "220000001", address = Address(city = "Harare")),
+                pricesIncludeTax = false, invoiceNo = "CN-7",
+            ),
+        ),
+        previousReceiptHash = "prev=", signature = DeviceSignature("hash=", "sig="), qrCode = "q", verificationCode = "v",
+    )
+
+    @Test
+    fun submitsReceiptsInZimrasForm() {
+        val transport = Recording(
+            ok("""{"operationID":"op","receiptID":9876543210,"serverDate":"2026-10-17T10:05:11",
+                "receiptServerSignature":{"hash":"h","signature":"s","certificateThumbprint":"AB"},
+                "validationErrors":[{"validationErrorCode":"RCPT025","validationErrorColor":"Yellow","validationErrorDescription":"d"}]}"""),
+        )
+        val accepted = client(transport).submitReceipt(issuedNote)
+        assertEquals(
+            AcceptedReceipt("op", 9876543210, LocalDateTime.of(2026, 10, 17, 10, 5, 11), ZimraSignature("h", "s", "AB"), listOf(ReceiptFinding("RCPT025", "Yellow", "d"))),
+            accepted,
+        )
+        val request = transport.requests.single()
+        assertEquals("https://fdms.example/Device/v1/321/SubmitReceipt", request.url)
+        assertTrue(request.deviceAuthenticated)
+        assertEquals(
+            """{"receipt":{"receiptType":"CreditNote","receiptCurrency":"USD","receiptCounter":2,"receiptGlobalNo":77,"invoiceNo":"CN-7",""" +
+                """"buyerData":{"buyerRegisterName":"Acme Ltd","vatNumber":"220000001","buyerTIN":"2000000001","buyerAddress":{"city":"Harare"}},""" +
+                """"receiptNotes":"Returned","receiptDate":"2026-10-17T10:05:09","creditDebitNote":{"receiptID":9001},""" +
+                """"receiptLinesTaxInclusive":false,"receiptLines":[""" +
+                """{"receiptLineType":"Sale","receiptLineNo":1,"receiptLineHSCode":"19059000","receiptLineName":"Bread","receiptLinePrice":-10.00,"receiptLineQuantity":2,"receiptLineTotal":-20.00,"taxPercent":15,"taxID":1},""" +
+                """{"receiptLineType":"Sale","receiptLineNo":2,"receiptLineHSCode":"49019900","receiptLineName":"Book","receiptLinePrice":-3.00,"receiptLineQuantity":1,"receiptLineTotal":-3.00,"taxID":3}],""" +
+                """"receiptTaxes":[{"taxPercent":15,"taxID":1,"taxAmount":-3.00,"salesAmountWithTax":-23.00},{"taxID":3,"taxAmount":0.00,"salesAmountWithTax":-3.00}],""" +
+                """"receiptPayments":[{"moneyTypeCode":"Cash","paymentAmount":-26.00}],"receiptTotal":-26.00,"receiptPrintForm":"Receipt48",""" +
+                """"receiptDeviceSignature":{"hash":"hash=","signature":"sig="}}}""",
+            request.body,
+        )
+    }
+
+    @Test
+    fun opensAndClosesDaysInZimrasForm() {
+        val transport = Recording(ok("""{"operationID":"op-o","fiscalDayNo":5}"""), ok("""{"operationID":"op-c"}"""))
+        val client = client(transport)
+        assertEquals(OpenedDay("op-o", 5), client.openDay(5, LocalDateTime.of(2026, 10, 17, 7, 59, 1)))
+        val counters = listOf(
+            FiscalCounter(FiscalCounterType.BALANCE_BY_MONEY_TYPE, "usd", d("23.00"), moneyType = MoneyType.CASH),
+            FiscalCounter(FiscalCounterType.SALE_BY_TAX, "USD", d("20.00"), STANDARD, d("15")),
+            FiscalCounter(FiscalCounterType.SALE_BY_TAX, "USD", d("3.00"), EXEMPT, null),
+            FiscalCounter(FiscalCounterType.SALE_TAX_BY_TAX, "USD", d("0.00"), STANDARD, d("15")),
+        )
+        assertEquals("op-c", client.closeDay(5, counters, DeviceSignature("h=", "s="), 3))
+        val (open, close) = transport.requests
+        assertEquals("https://fdms.example/Device/v1/321/OpenDay", open.url)
+        assertEquals("""{"fiscalDayOpened":"2026-10-17T07:59:01","fiscalDayNo":5}""", open.body)
+        assertEquals("https://fdms.example/Device/v1/321/CloseDay", close.url)
+        assertEquals(
+            """{"fiscalDayNo":5,"fiscalDayCounters":[""" +
+                """{"fiscalCounterType":"SaleByTax","fiscalCounterCurrency":"USD","fiscalCounterTaxID":1,"fiscalCounterTaxPercent":15,"fiscalCounterValue":20.00},""" +
+                """{"fiscalCounterType":"SaleByTax","fiscalCounterCurrency":"USD","fiscalCounterTaxID":3,"fiscalCounterValue":3.00},""" +
+                """{"fiscalCounterType":"BalanceByMoneyType","fiscalCounterCurrency":"USD","fiscalCounterMoneyType":"Cash","fiscalCounterValue":23.00}],""" +
+                """"fiscalDayDeviceSignature":{"hash":"h=","signature":"s="},"receiptCounter":3}""",
+            close.body,
+        )
+    }
+
+    @Test
+    fun readsZimrasDayCloseDetails() {
+        val transport = Recording(
+            ok("""{"fiscalDayStatus":"FiscalDayClosed","lastFiscalDayNo":5,"fiscalDayClosed":"2026-10-17T22:00:00",
+                "fiscalDayReconciliationMode":"Manual","fiscalDayServerSignature":{"hash":"h","signature":"s","certificateThumbprint":"AB"},
+                "fiscalDayCounter":[{"fiscalCounterType":"SaleByTax","fiscalCounterCurrency":"USD","fiscalCounterTaxID":1,"fiscalCounterTaxPercent":15.00,"fiscalCounterValue":20.00}]}"""),
+        )
+        val status = client(transport).getStatus()
+        assertEquals("Manual", status.reconciliationMode)
+        assertEquals(ZimraSignature("h", "s", "AB"), status.serverSignature)
+        assertEquals(listOf(FiscalCounter(FiscalCounterType.SALE_BY_TAX, "USD", d("20.00"), 1, d("15.00"))), status.counters)
+    }
+
     @Test
     fun zimraErrorsCarryTheirCodeAndOperation() {
         val transport = Recording(

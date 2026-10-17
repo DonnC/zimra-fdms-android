@@ -41,6 +41,10 @@ internal object StoreCodec {
                 record.validations.map { obj("code" to str(it.code), "colour" to opt(it.colour), "message" to opt(it.message)) },
             ),
             "updatedAt" to str(record.updatedAt.toString()),
+            "zimraSignature" to record.zimraSignature?.let {
+                obj("hash" to opt(it.hash), "signature" to str(it.signature), "certificateThumbprint" to opt(it.certificateThumbprint))
+            },
+            "zimraSignatureVerified" to JsonValue.Bool(record.zimraSignatureVerified),
             "seal" to opt(record.seal),
         ),
     )
@@ -56,6 +60,10 @@ internal object StoreCodec {
                 ZimraValidation(v.text("code"), v.optText("colour"), v.optText("message"))
             },
             updatedAt = Instant.parse(text("updatedAt")),
+            zimraSignature = optObj("zimraSignature")?.let {
+                ZimraSignature(it.optText("hash"), it.text("signature"), it.optText("certificateThumbprint"))
+            },
+            zimraSignatureVerified = optBool("zimraSignatureVerified") ?: false,
             seal = optText("seal"),
         )
     }
@@ -79,6 +87,10 @@ internal object StoreCodec {
         "lastReceiptHash" to opt(d.lastReceiptHash),
         "counters" to JsonValue.Arr(d.counters.map(::counter)),
         "closeReason" to opt(d.closeReason?.name),
+        "zimraOpened" to JsonValue.Bool(d.zimraOpened),
+        "blockingReceipts" to num(d.blockingReceipts),
+        "closeSignature" to d.closeSignature?.let { obj("hash" to str(it.hash), "signature" to str(it.signature)) },
+        "closingErrorCode" to opt(d.closingErrorCode),
     )
 
     private fun counter(c: FiscalCounter) = obj(
@@ -204,6 +216,10 @@ internal object StoreCodec {
         lastReceiptHash = o.optText("lastReceiptHash"),
         counters = o.list("counters").map { counter(it.asObj()) },
         closeReason = o.optText("closeReason")?.let { enumValueOf<DayCloseReason>(it) },
+        zimraOpened = o.optBool("zimraOpened") ?: false,
+        blockingReceipts = o.optInt("blockingReceipts") ?: 0,
+        closeSignature = o.optObj("closeSignature")?.let { DeviceSignature(it.text("hash"), it.text("signature")) },
+        closingErrorCode = o.optText("closingErrorCode"),
     )
 
     private fun counter(o: JsonValue.Obj) = FiscalCounter(
@@ -294,6 +310,7 @@ internal object StoreCodec {
     private fun JsonValue.Obj.optLong(key: String) = field(key)?.let { long(key) }
     private fun JsonValue.Obj.dec(key: String) = BigDecimal(text(key))
     private fun JsonValue.Obj.optDec(key: String) = optText(key)?.let(::BigDecimal)
+    private fun JsonValue.Obj.optBool(key: String) = field(key)?.let { bool(key) }
     private fun JsonValue.Obj.bool(key: String) = (required(key) as? JsonValue.Bool)?.value ?: throw FiscalStoreException("'$key' is not true or false")
     private fun JsonValue.Obj.list(key: String) = (required(key) as? JsonValue.Arr)?.items ?: throw FiscalStoreException("'$key' is not a list")
 }

@@ -38,6 +38,13 @@ public enum class DayCloseReason {
      * keep issuing. Worth telling the user: a Z report appears mid-trading.
      */
     GLOBAL_NUMBER_LIMIT,
+
+    /**
+     * ZIMRA reported a change in the taxpayer's VAT registration. ZIMRA
+     * requires the day to be closed and a new one opened before receipts
+     * reflect it.
+     */
+    VAT_REGISTRATION_CHANGED,
 }
 
 /**
@@ -48,6 +55,12 @@ public enum class DayCloseReason {
  *   first receipt of the day.
  * @property counters the day's fiscal counters so far.
  * @property closeReason why the day is being closed; `null` while it is open.
+ * @property zimraOpened whether ZIMRA has acknowledged the day's opening.
+ * @property blockingReceipts receipts ZIMRA marked Grey or Red. ZIMRA does not
+ *   let the device close a day that has any; it must then be closed in ZIMRA's
+ *   portal.
+ * @property closeSignature the device's signature on the day's close, once sent.
+ * @property closingErrorCode why ZIMRA refused the last close, if it did.
  */
 public data class FiscalDayState(
     val fiscalDayNo: Int,
@@ -57,6 +70,10 @@ public data class FiscalDayState(
     val lastReceiptHash: String?,
     val counters: List<FiscalCounter>,
     val closeReason: DayCloseReason? = null,
+    val zimraOpened: Boolean = false,
+    val blockingReceipts: Int = 0,
+    val closeSignature: DeviceSignature? = null,
+    val closingErrorCode: String? = null,
 )
 
 /**
@@ -149,6 +166,9 @@ public data class ZimraValidation(
  * @property zimraReceiptId the receipt ID ZIMRA assigned, once accepted.
  * @property serverDate when ZIMRA received the receipt.
  * @property updatedAt when this record last changed.
+ * @property zimraSignature ZIMRA's signature on the accepted receipt.
+ * @property zimraSignatureVerified whether [zimraSignature] was checked
+ *   against ZIMRA's signing certificate and found valid.
  * @property seal fzimra's tamper-evident seal over the rest of the record.
  *   Stores keep it as given; fzimra refuses a record whose seal does not match.
  */
@@ -159,5 +179,7 @@ public data class ReceiptRecord(
     val serverDate: LocalDateTime? = null,
     val validations: List<ZimraValidation> = emptyList(),
     val updatedAt: Instant,
+    val zimraSignature: ZimraSignature? = null,
+    val zimraSignatureVerified: Boolean = false,
     val seal: String? = null,
 )
