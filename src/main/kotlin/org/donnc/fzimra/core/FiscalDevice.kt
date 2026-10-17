@@ -98,6 +98,31 @@ public class FiscalDevice(
     @Volatile
     private var receiptsChecked = false
 
+    private val workListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
+    /**
+     * Calls [listener] whenever there is new work for ZIMRA: a receipt was
+     * issued, or a fiscal day's close was requested. Use it to start a
+     * `FiscalSync` run; `Fzimra.device` does this for you. Called after the
+     * change is saved, on the thread that made it; keep it short.
+     */
+    public fun addWorkListener(listener: () -> Unit) {
+        workListeners += listener
+    }
+
+    /** Stops calling [listener]. */
+    public fun removeWorkListener(listener: () -> Unit) {
+        workListeners -= listener
+    }
+
+    private fun workQueued() = workListeners.forEach { listener ->
+        try {
+            listener()
+        } catch (e: RuntimeException) {
+            // a listener's failure must not undo or hide the change it was told of
+        }
+    }
+
     /**
      * Records of issued receipts, read-only.
      *
@@ -248,7 +273,7 @@ public class FiscalDevice(
      */
     public fun updateConfiguration(configuration: DeviceConfiguration) {
         require(configuration.deviceId == deviceId) { "the configuration is for device ${configuration.deviceId}, not $deviceId" }
-        synchronized(lock) {
+        val closing = synchronized(lock) {
             val vatChanged = configuration.isVatPayer != this.configuration.isVatPayer
             this.configuration = configuration
             if (!vatChanged) return
@@ -263,7 +288,9 @@ public class FiscalDevice(
                     ),
                 ),
             )
+            true
         }
+        if (closing) workQueued()
     }
 
     /**
@@ -272,7 +299,9 @@ public class FiscalDevice(
      *
      * @return `true` if the day's close had been refused and is now requested again.
      */
-    public fun retryDayClose(fiscalDayNo: Int): Boolean = synchronized(lock) {
+    public fun retryDayClose(fiscalDayNo: Int): Boolean = retryDayCloseLocked(fiscalDayNo).also { if (it) workQueued() }
+
+    private fun retryDayCloseLocked(fiscalDayNo: Int): Boolean = synchronized(lock) {
         val snapshot = read() ?: return false
         var found = false
         val state = snapshot.state.mapDays { day ->
@@ -312,7 +341,9 @@ public class FiscalDevice(
      *
      * @return `true` if a day was open and is now marked for closing.
      */
-    public fun requestDayClose(): Boolean = synchronized(lock) {
+    public fun requestDayClose(): Boolean = requestDayCloseLocked().also { if (it) workQueued() }
+
+    private fun requestDayCloseLocked(): Boolean = synchronized(lock) {
         val snapshot = read() ?: return false
         val day = snapshot.state.currentDay ?: return false
         if (!day.status.acceptsReceipts()) return false
@@ -341,7 +372,10 @@ public class FiscalDevice(
      * @throws FiscalIntegrityException if the stored state fails its checks;
      *   nothing is issued.
      */
-    public fun issue(request: ReceiptRequest): IssueResult = synchronized(lock) {
+    public fun issue(request: ReceiptRequest): IssueResult =
+        issueLocked(request).also { if (it is IssueResult.Issued) workQueued() }
+
+    private fun issueLocked(request: ReceiptRequest): IssueResult = synchronized(lock) {
         val now = clock.now()
         val snapshot = read() ?: FiscalSnapshot(0, DeviceState(deviceId, 0, null, 0, null), emptyList())
         var state = snapshot.state

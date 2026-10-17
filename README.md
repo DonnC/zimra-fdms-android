@@ -373,6 +373,46 @@ Along the way a run:
 - notices a day closed in ZIMRA's portal and starts a new one with the next
   sale.
 
+#### Background sync
+
+fzimra can sync in the background, so receipts reach ZIMRA as soon as the
+network allows, even when your app is closed. Install it once, in
+`Application.onCreate`, with a way to build each device's sync:
+
+```kotlin
+class PosApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        FzimraBackground.install(
+            onReport = { deviceId, report -> uploadToYourServer(report.accepted) },
+        ) { context, deviceId ->
+            FiscalSync(myDevice(context, deviceId), myClient(context, deviceId))
+        }
+    }
+}
+```
+
+A device made with `Fzimra.device` then asks for a run after every sale and
+close request. Runs use the platform's `JobScheduler`, declared in fzimra's
+manifest, with no extra dependencies:
+
+- they run only with a network connection, and survive a restart of the phone;
+- while ZIMRA cannot be reached, each retry waits longer than the last;
+- while ZIMRA validates a close they look again after 30 seconds, while a
+  person must act every 30 minutes, and once nothing is waiting they stop
+  until the next sale;
+- work that arrives during a run is synced straight after it.
+
+`SyncSchedule` changes the follow-up times; `openDay` adds a periodic check
+while a day is open, to notice a close in ZIMRA's portal sooner. To sync on
+your own schedule instead, pass `backgroundSync = false` to `Fzimra.device`
+and call `FiscalSync.run`, or listen for new work with
+`FiscalDevice.addWorkListener`.
+
+ZIMRA also expects a device to report itself online with `ping` at the
+interval ZIMRA returns while it is in use; do that from your app while it is
+open.
+
 A run stops with `BLOCKED` when a person has to act:
 
 | Problem | What to do |

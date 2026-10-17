@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Background sync on Android (`FzimraBackground`, `FzimraSyncService`):
+  `JobScheduler` runs that need a network, survive restarts and back off while
+  ZIMRA cannot be reached; a run follows every sale and close request on a
+  device made with `Fzimra.device` (`backgroundSync`), and follows up as
+  `SyncSchedule` says (`NextSync`); work arriving during a run is synced right
+  after it. The library declares the job service and the
+  `RECEIVE_BOOT_COMPLETED` permission.
+- `FiscalDevice.addWorkListener`: told of each sale, close request, retried
+  close and VAT-driven close.
 - Syncing with ZIMRA (`FiscalSync`): opens fiscal days with ZIMRA, submits
   receipts strictly in order, closes due days with the device's signed
   counters and follows each close to ZIMRA's confirmation or refusal; each

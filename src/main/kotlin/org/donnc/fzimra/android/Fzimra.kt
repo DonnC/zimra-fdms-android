@@ -29,6 +29,10 @@ public object Fzimra {
      * `fzimra.seal.<deviceId>`, unless you pass your own [sealer]. That key is
      * held at least as securely as [signer]'s: in hardware, unless the device
      * key itself is a software key (as on an emulator).
+     *
+     * With [backgroundSync], each sale or close request asks `FzimraBackground`
+     * for a sync run, which takes effect once `FzimraBackground.install` has
+     * been called.
      */
     public fun device(
         context: Context,
@@ -39,9 +43,10 @@ public object Fzimra {
         sealer: Sealer? = null,
         clock: FiscalClock = ZimbabweClock(),
         numbering: GlobalNumbering = GlobalNumbering(),
+        backgroundSync: Boolean = true,
     ): FiscalDevice {
         val app = context.applicationContext
-        return FiscalDevice(
+        val device = FiscalDevice(
             configuration = configuration,
             signer = signer,
             stateStore = stateStore ?: DefaultStores.state(app),
@@ -53,6 +58,10 @@ public object Fzimra {
             clock = clock,
             numbering = numbering,
         )
+        if (backgroundSync) {
+            device.addWorkListener { FzimraBackground.requestSync(app, configuration.deviceId) }
+        }
+        return device
     }
 
     /**
