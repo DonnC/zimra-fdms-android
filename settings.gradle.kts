@@ -14,5 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-// One project, one artifact: the root project is the library itself.
+// The root project is the library itself. The simulator is an optional
+// companion library for development and tests; the example app consumes both.
 rootProject.name = "zimra-fdms-android"
+include(":simulator")

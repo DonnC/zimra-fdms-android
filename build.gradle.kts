@@ -1,6 +1,9 @@
 plugins {
     // AGP 9 compiles Kotlin itself (built-in Kotlin), so no separate Kotlin plugin.
     id("com.android.library") version "9.4.1"
+    // For the example app only.
+    id("com.android.application") version "9.4.1" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.2.10" apply false
 }
 
 group = "org.donnc"

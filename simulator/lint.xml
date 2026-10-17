@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- BouncyCastle's jar contains a trust-all manager for its own tools; the
+         simulator only uses its certificate classes. Our code is still checked. -->
+    <issue id="TrustAllX509TrustManager">
+        <ignore regexp="bcpkix-jdk18on" />
+    </issue>
+</lint>

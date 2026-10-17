@@ -451,6 +451,18 @@ A run stops with `BLOCKED` when a person has to act:
 | `FdmsException` | ZIMRA refused the request. `errorCode` (for example `DEV01`) and `FdmsErrors.message(code)` say why; `isAuthenticationFailure` means the device certificate was refused (expired, revoked or not this device's); `isRetryable` means try again later; quote `operationId` to ZIMRA support. |
 | `FdmsProtocolException` | ZIMRA's answer could not be understood. |
 
+#### Trying it without ZIMRA
+
+The [simulator](simulator/README.md) is a separate library with a ZIMRA
+gateway that runs inside your app or tests. It applies ZIMRA's rules,
+injects faults (offline, lost answers, refused closes), and shows what it
+received:
+
+```kotlin
+val simulator = FdmsSimulator()
+val zimra = simulator.client(identity, clientCertificate = { installedCertificate })
+```
+
 #### Other transports
 
 `FdmsTransport` is an interface, and `HttpsTransport` uses the platform's TLS
@@ -631,6 +643,7 @@ src/main/kotlin/org/donnc/fzimra/
 └── android/   Android platform integrations.
 src/test/kotlin/org/donnc/fzimra/
                Unit tests, run on the JVM.
+simulator/     Optional library: a ZIMRA gateway for development and tests.
 ```
 
 `core` must never import Android APIs, so it can be tested on the JVM and used
@@ -638,7 +651,8 @@ outside Android. A unit test (`CorePurityTest`) fails the build if it does.
 
 ## Testing
 
-`./gradlew test` runs the unit tests on the JVM, including the gateway client
+`./gradlew test` runs the unit tests on the JVM, including the simulator's
+end-to-end tests (fzimra's receipts must pass every one of its checks) and the gateway client
 over real mutual TLS against a local fake gateway with its own test
 certificate authority. With a device or emulator connected,
 `./gradlew connectedAndroidTest` runs the Android Keystore tests.

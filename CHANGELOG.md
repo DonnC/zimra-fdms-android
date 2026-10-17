@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The simulator (`:simulator`, `org.donnc.fzimra.simulator`), an optional
+  library: a ZIMRA Fiscal Device Gateway inside the app or tests
+  (`FdmsSimulator`). It issues device certificates from certificate requests
+  and authenticates devices by them. It checks receipts against ZIMRA's rules
+  (sequence, chain, signature, dates, totals, taxes, signs, HS codes, notes)
+  and validates closes a little later against its own counters. It reports
+  status, resends and Grey or Red days as ZIMRA does, signs what it accepts,
+  injects faults (`SimulatorFaults`), closes days as in the portal, and keeps
+  its state in memory or a file (`SimulatorStore`). Its behaviour follows the
+  zimra-fdms simulator, which replays ZIMRA's test environment (see
+  `simulator/NOTICE.md`).
 - `FiscalDevice.oldestUnsentReceiptDate()` and `SyncReport.oldestPendingDate`,
   to warn when receipts have waited long for ZIMRA.
 - `KeystoreSigner.zimraCertificateExpiry`, to renew the certificate in time.
