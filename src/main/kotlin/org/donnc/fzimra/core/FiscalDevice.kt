@@ -161,6 +161,76 @@ public class FiscalDevice(
     }
 
     /**
+     * Continues numbering from what ZIMRA reports for this device, when it
+     * was used by other software before. Only allowed before the device's
+     * first receipt.
+     *
+     * ZIMRA reports its latest-dated receipt, which is not always the highest
+     * number the other software issued. If you know that number, pass it as
+     * [previousLastGlobalNo]: numbering continues after the larger of the two.
+     *
+     * @throws IllegalStateException if ZIMRA still has a fiscal day open for
+     *   the device (close it from the software that opened it first), or this
+     *   device has already issued receipts.
+     */
+    public fun startFrom(status: ZimraStatus, previousLastGlobalNo: Int? = null) {
+        if (status.dayStatus != ZimraDayStatus.CLOSED) {
+            throw IllegalStateException(
+                "ZIMRA reports fiscal day ${status.lastFiscalDayNo} as ${status.dayStatus.zimraName}: " +
+                    "close it from the software that opened it first",
+            )
+        }
+        startFrom(maxOf(status.lastReceiptGlobalNo ?: 0, previousLastGlobalNo ?: 0), status.lastFiscalDayNo ?: 0)
+    }
+
+    /**
+     * Compares this device's state with what ZIMRA reports for it. Call it
+     * with a fresh `FdmsClient.getStatus()` before working with ZIMRA, for
+     * example on start-up.
+     *
+     * A device cannot tell by itself that its state was replaced by an older
+     * copy that fzimra itself sealed: ZIMRA's record of the device's last
+     * fiscal day and receipt can.
+     *
+     * @return what disagrees; empty when the state is consistent with ZIMRA.
+     *   Do not issue receipts while it is not empty.
+     * @throws FiscalIntegrityException if the stored state fails its own checks.
+     */
+    public fun compareWith(status: ZimraStatus): List<String> {
+        val state = read()?.state
+        val zimraDay = status.lastFiscalDayNo
+        if (state == null) {
+            return if (zimraDay == null) {
+                emptyList()
+            } else {
+                listOf("this device has no fiscal state, but ZIMRA has its fiscal day $zimraDay: use startFrom(status) before issuing")
+            }
+        }
+        if (zimraDay == null) return emptyList()
+
+        val problems = mutableListOf<String>()
+        if (zimraDay > state.lastFiscalDayNo) {
+            problems += "ZIMRA has fiscal day $zimraDay, but this device's state ends at day ${state.lastFiscalDayNo}: " +
+                "the state is older than what ZIMRA received, or the device was used elsewhere"
+        }
+        val tracked = listOfNotNull(state.currentDay) + state.closingDays
+        if (status.dayStatus != ZimraDayStatus.CLOSED && zimraDay <= state.lastFiscalDayNo && tracked.none { it.fiscalDayNo == zimraDay }) {
+            problems += "ZIMRA still has fiscal day $zimraDay ${status.dayStatus.zimraName}, but this device no longer tracks it"
+        }
+        val zimraGlobalNo = status.lastReceiptGlobalNo
+        val day = state.currentDay
+        // ZIMRA does not say which day its last receipt belongs to. When this day's
+        // numbering restarted at 1, that receipt may be from an earlier day, so the
+        // numbers can only be compared when they continued, or there is no earlier day.
+        val comparable = day != null && (state.lastGlobalNo - day.receiptCounter > 0 || day.fiscalDayNo == 1)
+        if (zimraGlobalNo != null && day?.fiscalDayNo == zimraDay && comparable && zimraGlobalNo > state.lastGlobalNo) {
+            problems += "ZIMRA received global number $zimraGlobalNo, but this device's last is ${state.lastGlobalNo}: " +
+                "the state is older than what ZIMRA received"
+        }
+        return problems
+    }
+
+    /**
      * Asks for the current fiscal day to be closed. The next receipt starts a
      * new fiscal day; the closing day is kept until ZIMRA confirms the close.
      *

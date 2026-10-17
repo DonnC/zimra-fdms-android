@@ -147,8 +147,8 @@ public class Payment private constructor(
     }
 }
 
-/** The buyer's address. */
-public data class BuyerAddress(
+/** An address, of a buyer or of a taxpayer's branch. */
+public data class Address(
     val province: String? = null,
     val city: String? = null,
     val street: String? = null,
@@ -156,8 +156,8 @@ public data class BuyerAddress(
     val district: String? = null,
 )
 
-/** The buyer's contact details. */
-public data class BuyerContacts(
+/** Contact details, of a buyer or of a taxpayer's branch. */
+public data class Contacts(
     val phoneNo: String? = null,
     val email: String? = null,
 )
@@ -174,8 +174,8 @@ public data class Buyer(
     val tin: String,
     val vatNumber: String? = null,
     val tradeName: String? = null,
-    val contacts: BuyerContacts? = null,
-    val address: BuyerAddress? = null,
+    val contacts: Contacts? = null,
+    val address: Address? = null,
 )
 
 /** The receipt a credit or debit note corrects. */

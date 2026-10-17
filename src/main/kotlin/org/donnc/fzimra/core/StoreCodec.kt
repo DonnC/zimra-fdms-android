@@ -268,9 +268,9 @@ internal object StoreCodec {
         tin = o.text("tin"),
         vatNumber = o.optText("vatNumber"),
         tradeName = o.optText("tradeName"),
-        contacts = o.optObj("contacts")?.let { BuyerContacts(it.optText("phoneNo"), it.optText("email")) },
+        contacts = o.optObj("contacts")?.let { Contacts(it.optText("phoneNo"), it.optText("email")) },
         address = o.optObj("address")?.let {
-            BuyerAddress(it.optText("province"), it.optText("city"), it.optText("street"), it.optText("houseNo"), it.optText("district"))
+            Address(it.optText("province"), it.optText("city"), it.optText("street"), it.optText("houseNo"), it.optText("district"))
         },
     )
 

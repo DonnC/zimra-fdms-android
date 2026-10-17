@@ -2,6 +2,7 @@ package org.donnc.fzimra.core
 
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
@@ -32,6 +33,17 @@ public class ZimbabweClock(
 
     override fun now(): LocalDateTime =
         LocalDateTime.ofInstant(base.instant().plus(offset), zone).truncatedTo(ChronoUnit.SECONDS)
+
+    /**
+     * Corrects [offset] towards ZIMRA's clock, from a [serverTime] received
+     * just now after a request that took [roundTrip]. Server times carry whole
+     * seconds, so differences under two seconds are ignored rather than
+     * chased. `FdmsClient` calls this for you when given the clock.
+     */
+    public fun adjustTo(serverTime: Instant, roundTrip: Duration) {
+        val estimate = Duration.between(base.instant(), serverTime.plus(roundTrip.dividedBy(2)))
+        if (estimate.minus(offset).abs() >= Duration.ofSeconds(2)) offset = estimate
+    }
 
     public companion object {
         /** Zimbabwe's time zone. */

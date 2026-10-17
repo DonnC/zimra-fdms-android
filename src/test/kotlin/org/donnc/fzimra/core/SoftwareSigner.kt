@@ -16,7 +16,7 @@ import java.util.Base64
  * live in secure hardware, which is why the library ships no such signer.
  */
 internal class SoftwareSigner(
-    private val privateKey: PrivateKey,
+    val privateKey: PrivateKey,
     override val publicKey: PublicKey,
     override val algorithm: SignatureAlgorithm,
 ) : Signer {

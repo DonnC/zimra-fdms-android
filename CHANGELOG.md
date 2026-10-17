@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Connecting to ZIMRA:
+  - `FdmsClient`: taxpayer verification, device registration, certificate
+    renewal, configuration, status, ping and ZIMRA's signing certificate,
+    with ZIMRA's headers, error details (`FdmsException`, `FdmsErrors`) and
+    retries for reads and pings only;
+  - `HttpsTransport`: HTTPS with mutual TLS on the platform's TLS stack and no
+    extra dependencies; `FdmsTransport` for other transports;
+  - `KeystoreSigner.installCertificate`, `hasZimraCertificate` and
+    `keyManager()`: the ZIMRA certificate is checked and kept with the key,
+    and the TLS handshake is signed inside the Keystore;
+  - `Fzimra.client` builds a client for a Keystore device key;
+  - the library declares the `INTERNET` permission;
+  - `DeviceCertificate`: reads ZIMRA's certificate and checks it is for the
+    device key and device ID, and valid;
+  - `ZimraConfiguration.toDeviceConfiguration`, and a `ZimbabweClock` kept in
+    step with ZIMRA's clock from each answer (`adjustTo`).
+- `FiscalDevice.compareWith(status)` compares the device state with ZIMRA's
+  record of its days and receipts, which catches a state replaced by an older
+  sealed copy; `FiscalDevice.startFrom(status)` continues numbering from
+  ZIMRA's figures.
+- Tests: every request's form and every answer's reading, errors and retries,
+  the clock, mutual TLS against a local fake gateway (registration, device
+  requests, refused certificates, untrusted servers, timeouts), certificate
+  checks and comparisons with ZIMRA; on-device certificate tests.
 - Tamper evidence for stored data:
   - `Sealer`, and `KeystoreSealer`: an HMAC-SHA256 key in Android Keystore
     (StrongBox when available) that seals every stored device state and
@@ -121,6 +145,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `BuyerAddress` and `BuyerContacts` are now `Address` and `Contacts`, also
+  used for the taxpayer's branch.
 - `FiscalDevice` takes a `sealer`.
 - `ReceiptRecords.find` takes the fiscal day number as well as the global
   number, since global numbers may repeat across fiscal days.

@@ -32,8 +32,8 @@ internal fun sampleReceipt(globalNo: Int, deviceId: Int = 7001, type: ReceiptTyp
             payments = listOf(Payment.card(10), Payment.cash(50)),
             buyer = Buyer(
                 "Mbare Hardware (Pvt) Ltd", "2000456781", "220045678", "Mbare Branch",
-                BuyerContacts("+263 242 700 123", "accounts@mbare.co.zw"),
-                BuyerAddress("Harare", "Harare", "Kwame Nkrumah Ave", "48", "CBD"),
+                Contacts("+263 242 700 123", "accounts@mbare.co.zw"),
+                Address("Harare", "Harare", "Kwame Nkrumah Ave", "48", "CBD"),
             ),
         )
     }

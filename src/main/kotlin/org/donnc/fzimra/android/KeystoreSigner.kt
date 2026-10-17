@@ -7,16 +7,24 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
+import org.donnc.fzimra.core.DeviceCertificate
+import org.donnc.fzimra.core.DeviceCertificateException
+import org.donnc.fzimra.core.DeviceIdentity
 import org.donnc.fzimra.core.SignatureAlgorithm
 import org.donnc.fzimra.core.Signer
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.KeyStore
+import java.net.Socket
+import java.security.Principal
 import java.security.PrivateKey
 import java.security.PublicKey
 import java.security.Signature
 import java.security.cert.X509Certificate
 import java.security.spec.ECGenParameterSpec
+import javax.net.ssl.SSLEngine
+import javax.net.ssl.X509ExtendedKeyManager
+import javax.net.ssl.X509KeyManager
 
 /** Where a device key is held. */
 public enum class KeySecurityLevel {
@@ -68,7 +76,8 @@ public class KeystoreSigner private constructor(
     /**
      * The key's certificate chain from the Keystore. When the key was created
      * with an attestation challenge, this is the key attestation chain, which
-     * lets a server confirm that the key was generated in secure hardware.
+     * lets a server confirm that the key was generated in secure hardware;
+     * read it before [installCertificate], which replaces it.
      */
     public val certificateChain: List<X509Certificate>
         get() = Keystore.keyStore().getCertificateChain(alias)?.map { it as X509Certificate }.orEmpty()
@@ -78,6 +87,58 @@ public class KeystoreSigner private constructor(
         get() = Keystore.securityLevel(
             KeyFactory.getInstance(privateKey.algorithm, Keystore.PROVIDER).getKeySpec(privateKey, KeyInfo::class.java),
         )
+
+    /** Whether a ZIMRA device certificate has been installed for the key. */
+    public val hasZimraCertificate: Boolean
+        get() = zimraChain() != null
+
+    /**
+     * Stores the device certificate ZIMRA issued (from `registerDevice` or
+     * `issueCertificate`) with the key, for mutual TLS with ZIMRA. It replaces
+     * the key's current certificate chain.
+     *
+     * @throws DeviceCertificateException if [certificatePem] is not a valid
+     *   certificate for this key and the device in [identity].
+     */
+    public fun installCertificate(certificatePem: String, identity: DeviceIdentity) {
+        val chain = DeviceCertificate.parse(certificatePem)
+        DeviceCertificate.check(chain.first(), publicKey, identity)
+        Keystore.keyStore().setKeyEntry(alias, privateKey, null, chain.toTypedArray())
+    }
+
+    /**
+     * The key and its ZIMRA certificate for TLS, for `HttpsTransport`. The
+     * private key stays in the Keystore; the TLS stack signs with it there.
+     * The certificate is looked up at each connection, so a certificate
+     * installed later is used without a new key manager.
+     */
+    public fun keyManager(): X509KeyManager = object : X509ExtendedKeyManager() {
+        override fun getClientAliases(keyType: String?, issuers: Array<out Principal>?): Array<String>? =
+            if (hasZimraCertificate) arrayOf(alias) else null
+
+        override fun chooseClientAlias(keyType: Array<out String>?, issuers: Array<out Principal>?, socket: Socket?): String? =
+            if (hasZimraCertificate) alias else null
+
+        override fun chooseEngineClientAlias(keyType: Array<out String>?, issuers: Array<out Principal>?, engine: SSLEngine?): String? =
+            if (hasZimraCertificate) alias else null
+
+        override fun getCertificateChain(alias: String?): Array<X509Certificate>? =
+            if (alias == this@KeystoreSigner.alias) zimraChain()?.toTypedArray() else null
+
+        override fun getPrivateKey(alias: String?): PrivateKey? = if (alias == this@KeystoreSigner.alias) privateKey else null
+
+        override fun getServerAliases(keyType: String?, issuers: Array<out Principal>?): Array<String>? = null
+
+        override fun chooseServerAlias(keyType: String?, issuers: Array<out Principal>?, socket: Socket?): String? = null
+    }
+
+    /** The installed ZIMRA certificate chain, or `null` while the key has only its own. */
+    private fun zimraChain(): List<X509Certificate>? {
+        val chain = certificateChain
+        val leaf = chain.firstOrNull() ?: return null
+        val issuedByZimra = leaf.subjectX500Principal.name.contains("CN=ZIMRA-") && leaf.subjectX500Principal != leaf.issuerX500Principal
+        return chain.takeIf { issuedByZimra && leaf.publicKey.encoded.contentEquals(publicKey.encoded) }
+    }
 
     override fun toString(): String = "KeystoreSigner(alias=$alias)"
 

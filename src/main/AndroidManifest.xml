@@ -1,2 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Receipts and fiscal days are reported to ZIMRA's Fiscal Device Gateway. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+</manifest>

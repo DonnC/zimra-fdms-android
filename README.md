@@ -266,6 +266,88 @@ with the device key:
 val csrPem = DeviceCsr.create(signer, serialNo = "FP9320-2026-XYZ01", deviceId = 674473)
 ```
 
+### Connecting to ZIMRA
+
+`FdmsClient` talks to ZIMRA's Fiscal Device Gateway for one device. Requests
+other than taxpayer verification, registration and ZIMRA's signing
+certificate authenticate the device with mutual TLS: the device certificate
+is presented and the TLS handshake is signed by the device key inside the
+Keystore. `Fzimra.client` sets this up:
+
+```kotlin
+val identity = DeviceIdentity(
+    deviceId = 674473,
+    serialNo = "FP9320-2026-XYZ01",
+    modelName = "YourPOS",      // exactly as registered with ZIMRA
+    modelVersion = "1.0",
+)
+val clock = ZimbabweClock()
+val zimra = Fzimra.client(identity, signer, FdmsEnvironment.TEST, clock)
+```
+
+Calls block until ZIMRA answers, so make them off the main thread. Requests
+that only read, and pings, are repeated after network and server errors;
+requests that change something at ZIMRA are not.
+
+#### Registering a device
+
+```kotlin
+val taxpayer = zimra.verifyTaxpayerInformation(activationKey)
+// Show taxpayer.taxpayerName, taxpayerTin and branch; continue only if they are yours.
+
+val issued = zimra.registerDevice(activationKey, DeviceCsr.create(signer, identity.serialNo, identity.deviceId))
+signer.installCertificate(issued.certificatePem, identity)
+```
+
+`installCertificate` checks that the certificate is for the device key and
+this device ID, and valid, then stores it with the key in the Keystore. The
+same client then works for every other request. Renew the certificate before
+it expires with `issueCertificate` and install the new one the same way.
+Installing replaces the key's attestation chain, so read
+`signer.certificateChain` first if your server needs it.
+
+#### Working with ZIMRA
+
+```kotlin
+val config = zimra.getConfig()                   // taxes, VAT registration, limits, QR URL
+val device = Fzimra.device(context, config.toDeviceConfiguration(identity.deviceId), signer, clock = clock)
+
+val status = zimra.getStatus()                   // ZIMRA's view of the device's days and receipts
+if (device.state() == null && status.lastFiscalDayNo != null) device.startFrom(status)
+val problems = device.compareWith(status)        // empty when the device agrees with ZIMRA
+
+val minutes = zimra.ping()                       // ping again after this many minutes
+```
+
+Fetch the configuration before each new fiscal day: taxes, VAT registration
+and limits can change. `startFrom(status)` continues the numbering of a
+device that other software used before; it refuses while ZIMRA still has a
+fiscal day open for it.
+
+`compareWith` is what catches a device state replaced by an older copy,
+which seals cannot (see [Tamper evidence](#tamper-evidence)): ZIMRA has
+received fiscal days or receipts the state does not know of. Do not issue
+receipts while it reports problems.
+
+Passing the same `ZimbabweClock` to the client and the device keeps receipt
+dates in step with ZIMRA's clock: each answer's time corrects the clock's
+offset, so receipts are never dated ahead of ZIMRA.
+
+#### Errors
+
+| Exception | Meaning |
+|---|---|
+| `FdmsNetworkException` | ZIMRA could not be reached or did not answer. Try again later. |
+| `FdmsException` | ZIMRA refused the request. `errorCode` (for example `DEV01`) and `FdmsErrors.message(code)` say why; `isAuthenticationFailure` means the device certificate was refused (expired, revoked or not this device's); `isRetryable` means try again later; quote `operationId` to ZIMRA support. |
+| `FdmsProtocolException` | ZIMRA's answer could not be understood. |
+
+#### Other transports
+
+`FdmsTransport` is an interface, and `HttpsTransport` uses the platform's TLS
+with no extra dependencies. To trust a particular authority (for example a
+test server), pass an `X509TrustManager` as `trust`; to route requests your
+own way, implement `FdmsTransport`.
+
 ### Signing
 
 `FiscalSignature.sign` signs a string built by `SignatureStrings` and returns
@@ -446,8 +528,10 @@ outside Android. A unit test (`CorePurityTest`) fails the build if it does.
 
 ## Testing
 
-`./gradlew test` runs the unit tests on the JVM. With a device or emulator
-connected, `./gradlew connectedAndroidTest` runs the Android Keystore tests.
+`./gradlew test` runs the unit tests on the JVM, including the gateway client
+over real mutual TLS against a local fake gateway with its own test
+certificate authority. With a device or emulator connected,
+`./gradlew connectedAndroidTest` runs the Android Keystore tests.
 
 Signing strings, hashes, signatures and QR codes are checked against:
 
