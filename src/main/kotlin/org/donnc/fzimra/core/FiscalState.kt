@@ -51,6 +51,8 @@ public data class FiscalDayState(
  * @property lastFiscalDayNo number of the most recent fiscal day; 0 before the
  *   first day.
  * @property currentDay the current fiscal day, if one exists.
+ * @property closingDays earlier fiscal days whose close ZIMRA has not yet
+ *   confirmed, oldest first. Their counters are needed to close them.
  */
 public data class DeviceState(
     val deviceId: Int,
@@ -58,6 +60,7 @@ public data class DeviceState(
     val lastReceiptDate: LocalDateTime?,
     val lastFiscalDayNo: Int,
     val currentDay: FiscalDayState?,
+    val closingDays: List<FiscalDayState> = emptyList(),
 )
 
 /**

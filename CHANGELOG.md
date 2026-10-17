@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Issuing receipts:
+  - `FiscalDevice.issue` prepares, numbers, chains, dates, signs and saves a
+    receipt in one step, and returns `IssueResult.Issued` or `Refused`;
+  - fiscal days open with the first sale and roll over before ZIMRA's
+    maximum day length or after `requestDayClose()`; closing days are kept
+    with their counters (`DeviceState.closingDays`);
+  - receipt counter, global number and hash chain follow on without gaps; a
+    refused, unsigned or unsaved receipt uses no number;
+  - receipt dates in Zimbabwe time (`ZimbabweClock`, with an offset towards
+    ZIMRA's clock), never earlier than the previous receipt;
+  - `startFrom` continues numbering from another system;
+  - issuing is serialised per device ID across the app;
+  - `Fzimra.device` sets up a device with fzimra's own stores unless the app
+    provides its own; `DeviceConfiguration` holds the device's ZIMRA settings.
+- Tests: numbering, chaining, dates, refusals and failures that use no
+  number, day rollover and close requests, restarts, two instances for one
+  device, and concurrent issuing.
 - Storage:
   - `FiscalStateStore`: a device's numbering state and the receipts ZIMRA
     has not yet accepted, saved as one atomic `FiscalSnapshot`; never pruned;

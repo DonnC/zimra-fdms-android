@@ -61,6 +61,7 @@ internal object StoreCodec {
         "lastReceiptDate" to s.lastReceiptDate?.let { str(it.toString()) },
         "lastFiscalDayNo" to num(s.lastFiscalDayNo),
         "currentDay" to s.currentDay?.let(::day),
+        "closingDays" to JsonValue.Arr(s.closingDays.map(::day)),
     )
 
     private fun day(d: FiscalDayState) = obj(
@@ -184,6 +185,7 @@ internal object StoreCodec {
         lastReceiptDate = o.optText("lastReceiptDate")?.let(LocalDateTime::parse),
         lastFiscalDayNo = o.int("lastFiscalDayNo"),
         currentDay = o.optObj("currentDay")?.let(::day),
+        closingDays = o.list("closingDays").map { day(it.asObj()) },
     )
 
     private fun day(o: JsonValue.Obj) = FiscalDayState(

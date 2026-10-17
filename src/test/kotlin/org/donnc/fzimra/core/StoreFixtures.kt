@@ -70,6 +70,16 @@ internal fun sampleSnapshot(version: Long = 3, deviceId: Int = 7001) = FiscalSna
                 FiscalCounter(FiscalCounterType.BALANCE_BY_MONEY_TYPE, "USD", d("22.30"), moneyType = MoneyType.CASH),
             ),
         ),
+        closingDays = listOf(
+            FiscalDayState(
+                fiscalDayNo = 3,
+                openedAt = LocalDateTime.of(2026, 10, 16, 8, 0),
+                status = FiscalDayStatus.CLOSE_REQUESTED,
+                receiptCounter = 9,
+                lastReceiptHash = "day3+last=",
+                counters = listOf(FiscalCounter(FiscalCounterType.SALE_BY_TAX, "ZWG", d("120.50"), STANDARD, d("15"))),
+            ),
+        ),
     ),
     outbox = listOf(sampleReceipt(1, deviceId), sampleReceipt(2, deviceId, ReceiptType.CREDIT_NOTE)),
 )

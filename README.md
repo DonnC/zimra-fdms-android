@@ -41,6 +41,52 @@ library from source and depend on the resulting AAR.
 
 ## Usage
 
+### Issuing receipts
+
+`FiscalDevice` issues receipts: each one is numbered, chained to the previous
+receipt, dated, signed and saved before `issue` returns.
+
+```kotlin
+val configuration = DeviceConfiguration(
+    deviceId = 674473,
+    qrUrl = "https://fdmstest.zimra.co.zw",
+    taxes = taxes,          // the taxes in the device's ZIMRA configuration
+    isVatPayer = true,
+    dayMaxHours = 24,
+)
+val device = Fzimra.device(context, configuration, signer = KeystoreSigner.getOrCreate("fzimra-device-674473"))
+
+when (val result = device.issue(request)) {
+    is IssueResult.Issued -> {
+        val receipt = result.receipt
+        receipt.globalNo; receipt.receiptCounter; receipt.fiscalDayNo; receipt.date
+        receipt.qrCode            // print as a QR code
+        receipt.verificationCode  // print as text, e.g. 4C8B-E276-6333-0417
+    }
+    is IssueResult.Refused -> showProblems(result.problems) // nothing was issued
+}
+```
+
+fzimra fills in what can be derived:
+
+- **Fiscal day.** A day opens with the first sale. When ZIMRA's maximum day
+  length is near (an hour before, by default), or a close was requested with
+  `requestDayClose()`, the next sale starts a new day; the previous day is
+  kept until its close is confirmed.
+- **Numbers.** The receipt counter (per day) and the global number (never
+  reset) follow on without gaps. A receipt that is refused, or that cannot be
+  signed or saved, uses no number.
+- **Date.** Receipts are dated in Zimbabwe time, whatever the phone's time
+  zone, and always after the previous receipt.
+- **Chain, signature, QR code, verification code and fiscal counters.**
+
+Issued receipts wait in `pendingReceipts()` until ZIMRA accepts them. If the
+device was used by another system before, call `startFrom(lastGlobalNo,
+lastFiscalDayNo)` before its first receipt so the numbering continues.
+
+One device must issue from one place: fzimra serialises issuing per device ID
+within the app, and re-reads the saved state for every receipt.
+
 ### Preparing a receipt
 
 Describe the sale with what your app already knows. fzimra works out line
