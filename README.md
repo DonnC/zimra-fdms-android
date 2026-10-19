@@ -25,12 +25,20 @@ That is the whole integration. The terminal handles the rest itself:
 
 > fzimra is an independent open-source project, not affiliated with ZIMRA.
 
+<p align="center"><img src="docs/screenshots/receipt.png" width="320" alt="A fiscalised receipt with QR code and verification code"></p>
+
 ## Try it in two minutes
 
 Run the [example app](example/README.md) (`./gradlew :example:installDebug`)
 and tap **Set up simulated device**. It uses the built-in
 [simulator](simulator/README.md), so no ZIMRA account is needed, and its
 **Traffic** tab shows every exchange.
+
+<p align="center">
+  <img src="docs/screenshots/device-setup-simulator.png" width="30%" alt="Setting up a simulated device">
+  <img src="docs/screenshots/sell-checkout.png" width="30%" alt="Checking out a sale">
+  <img src="docs/screenshots/traffic.png" width="30%" alt="The traffic log of every exchange with ZIMRA">
+</p>
 
 ## Install
 
